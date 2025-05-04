@@ -49,7 +49,7 @@ export const getAllAttendees = async (req: Request, res: Response) => {
 export const getAttendeeById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const attendee = await attendeeService.getAttendeeById(parseInt(id));
+    const attendee = await attendeeService.getAttendeeById(id);
     
     if (!attendee) {
       return res.status(404).json({ message: "Attendee not found" });
@@ -66,7 +66,7 @@ export const updateAttendee = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const attendeeData = req.body;
-    const updatedAttendee = await attendeeService.updateAttendee(parseInt(id), attendeeData);
+    const updatedAttendee = await attendeeService.updateAttendee(id, attendeeData);
 
     if (!updatedAttendee) {
       return res.status(404).json({ message: "Attendee not found" });
@@ -85,7 +85,7 @@ export const updateAttendee = async (req: Request, res: Response) => {
 export const deleteAttendee = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await attendeeService.deleteAttendee(parseInt(id));
+    await attendeeService.deleteAttendee(id);
     return res.status(204).send();
   } catch (error) {
     console.error("Delete attendee error:", error);
