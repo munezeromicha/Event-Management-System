@@ -3,6 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import "reflect-metadata";
 import { AppDataSource } from "./config/database";
+import { setupSwagger } from "./config/swagger";
 import authRoutes from "./routes/authRoutes";
 import eventRoutes from "./routes/eventRoutes";
 import registrationRoutes from "./routes/registrationRoutes";
@@ -20,9 +21,13 @@ const apiLimiter = rateLimit({
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:3001', // Your frontend URL
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true 
+}));
 
-// Configure Helmet with custom CSP
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -51,17 +56,18 @@ AppDataSource.initialize()
     console.error("Database connection error:", error);
   });
 
-// Serve static files
 app.use(express.static(path.join(__dirname, '../public')));
 app.use("/js", express.static(path.join(__dirname, "../public/js")));
 app.use("/badges", express.static(path.join(__dirname, "../public/badges")));
 
-// API routes
 app.use("/api/auth", authRoutes);
 app.use("/api/events", eventRoutes);
 app.use("/api/registrations", registrationRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/badges", badgeRoutes);
+
+// Setup Swagger documentation
+setupSwagger(app);
 
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error(err.stack);

@@ -4,6 +4,7 @@ import { Attendee } from "./Attendee";
 import { Badge } from "./Badge";
 import { FinancialSupport } from "./FinancialSupport";
 import { Admin } from "./Admin";
+import { Attendance } from "./Attendance";
 
 @Entity()
 export class Registration {
@@ -22,8 +23,11 @@ export class Registration {
   @Column()
   phoneNumber!: string;
 
-  @Column()
-  nationalId!: string;
+  @Column({ nullable: true })
+  nationalId?: string;
+
+  @Column({ nullable: true })
+  passport?: string;
 
   @Column({ nullable: true })
   email?: string;
@@ -57,4 +61,7 @@ export class Registration {
   @ManyToOne(() => Admin, admin => admin.registrations)
   @JoinColumn({ name: "adminId" })
   admin!: Admin;
+
+  @OneToMany(() => Attendance, attendance => attendance.registration)
+  attendances!: Attendance[];
 }

@@ -1,3 +1,4 @@
+// middleware/auth.ts
 import { Request, Response, NextFunction } from "express";
 import { verifyToken } from "../utils/jwt";
 
@@ -5,7 +6,7 @@ export interface AuthRequest extends Request {
   user?: any;
 }
 
-export const authenticateJWT = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authenticateJWT = (req: AuthRequest, res: Response, next: NextFunction): void => {
   const authHeader = req.headers.authorization;
 
   if (authHeader) {
@@ -16,17 +17,29 @@ export const authenticateJWT = (req: AuthRequest, res: Response, next: NextFunct
       req.user = user;
       next();
     } catch (error) {
-      return res.status(403).json({ message: "Invalid token" });
+      res.status(403).json({ message: "Invalid token" });
+      // Don't return anything, just end the response
     }
   } else {
-    return res.status(401).json({ message: "Authentication required" });
+    res.status(401).json({ message: "Authentication required" });
+    // Don't return anything, just end the response
   }
 };
 
-export const isAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const isAdmin = (req: AuthRequest, res: Response, next: NextFunction): void => {
   if (req.user && req.user.role === "admin") {
     next();
   } else {
-    return res.status(403).json({ message: "Admin access required" });
+    res.status(403).json({ message: "Admin access required" });
+    // Don't return anything, just end the response
+  }
+};
+
+export const isEventManager = (req: AuthRequest, res: Response, next: NextFunction): void => {
+  if (req.user && req.user.role === "event_manager") {
+    next();
+  } else {
+    res.status(403).json({ message: "Event manager access required" });
+    // Don't return anything, just end the response
   }
 };

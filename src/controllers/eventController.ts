@@ -8,9 +8,21 @@ const eventRepository = AppDataSource.getRepository(Event);
 
 export const createEvent = async (req: AuthRequest, res: Response) => {
   try {
-    const { name, eventType, location, description, maxCapacity, financialSupportOption } = req.body;
+    const { 
+      name, 
+      eventType, 
+      location, 
+      description, 
+      maxCapacity, 
+      financialSupportOption,
+      date,
+      time 
+    } = req.body;
     
     const adminId = req.user.id;
+
+    // Combine date and time into a single DateTime object
+    const dateTime = new Date(`${date}T${time}`);
 
     const eventData = {
       name,
@@ -18,7 +30,8 @@ export const createEvent = async (req: AuthRequest, res: Response) => {
       location,
       description,
       maxCapacity,
-      financialSupportOption
+      financialSupportOption,
+      dateTime
     };
 
     const event = await eventService.createEvent(eventData, adminId);
@@ -45,7 +58,7 @@ export const createEvent = async (req: AuthRequest, res: Response) => {
 export const getAllEvents = async (req: Request, res: Response) => {
   try {
     const events = await eventService.getAllEvents();
-    return res.status(200).json({ events });
+    return res.status(200).json(events);
   } catch (error) {
     console.error("Get all events error:", error);
     return res.status(500).json({ message: "Internal server error" });
@@ -68,11 +81,40 @@ export const getEventById = async (req: Request, res: Response) => {
   }
 };
 
-export const updateEvent = async (req: Request, res: Response) => {
+export const updateEvent = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const eventData = req.body;
-    const updatedEvent = await eventService.updateEvent(id, eventData);
+    const { 
+      name, 
+      eventType, 
+      location, 
+      description, 
+      maxCapacity, 
+      financialSupportOption,
+      date,
+      time 
+    } = req.body;
+
+    // Prepare the update data
+    const updateData: any = {};
+
+    // Only include fields that are provided in the request
+    if (name !== undefined) updateData.name = name;
+    if (eventType !== undefined) updateData.eventType = eventType;
+    if (location !== undefined) updateData.location = location;
+    if (description !== undefined) updateData.description = description;
+    if (maxCapacity !== undefined) updateData.maxCapacity = maxCapacity;
+    if (financialSupportOption !== undefined) updateData.financialSupportOption = financialSupportOption;
+
+    // Only update dateTime if both date and time are provided
+    if (date && time) {
+      const dateTime = new Date(`${date}T${time}`);
+      if (!isNaN(dateTime.getTime())) { // Check if the date is valid
+        updateData.dateTime = dateTime;
+      }
+    }
+
+    const updatedEvent = await eventService.updateEvent(id, updateData);
 
     if (!updatedEvent) {
       return res.status(404).json({ message: "Event not found" });
@@ -80,7 +122,16 @@ export const updateEvent = async (req: Request, res: Response) => {
 
     return res.status(200).json({
       message: "Event updated successfully",
-      event: updatedEvent
+      event: {
+        id: updatedEvent.eventId,
+        name: updatedEvent.name,
+        eventType: updatedEvent.eventType,
+        dateTime: updatedEvent.dateTime,
+        location: updatedEvent.location,
+        description: updatedEvent.description,
+        maxCapacity: updatedEvent.maxCapacity,
+        financialSupportOption: updatedEvent.financialSupportOption
+      }
     });
   } catch (error) {
     console.error("Update event error:", error);

@@ -5,12 +5,13 @@ import { AuthRequest } from "../middleware/auth";
 export const registerForEvent = async (req: Request, res: Response) => {
   try {
     const { eventId } = req.params;
-    const { fullName, phoneNumber, nationalId, email, organization } = req.body;
+    const { fullName, phoneNumber, nationalId, passport, email, organization } = req.body;
 
     const registration = await registrationService.registerForEvent(eventId, {
       fullName,
       phoneNumber,
       nationalId,
+      passport,
       email,
       organization
     });
@@ -25,7 +26,46 @@ export const registerForEvent = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("Registration error:", error);
-    return res.status(400).json({ message: error.message });
+    if (error.message === "Already registered for this event") {
+      return res.status(409).json({ 
+        message: "You have already registered for this event",
+        code: "DUPLICATE_REGISTRATION"
+      });
+    }
+    if (error.message === "Event not found") {
+      return res.status(404).json({ 
+        message: "The event you are trying to register for does not exist",
+        code: "EVENT_NOT_FOUND"
+      });
+    }
+    if (error.message === "Either National ID or Passport is required") {
+      return res.status(400).json({ 
+        message: error.message,
+        code: "ID_REQUIRED"
+      });
+    }
+    if (error.message === "Please provide either National ID or Passport, not both") {
+      return res.status(400).json({ 
+        message: error.message,
+        code: "DUPLICATE_ID"
+      });
+    }
+    if (error.message === "National ID must be exactly 16 digits") {
+      return res.status(400).json({ 
+        message: error.message,
+        code: "INVALID_NATIONAL_ID"
+      });
+    }
+    if (error.message === "Passport number must contain only letters and numbers") {
+      return res.status(400).json({ 
+        message: error.message,
+        code: "INVALID_PASSPORT"
+      });
+    }
+    return res.status(400).json({ 
+      message: error.message || "Registration failed",
+      code: "REGISTRATION_ERROR"
+    });
   }
 };
 
@@ -35,9 +75,6 @@ export const approveRegistration = async (req: AuthRequest, res: Response) => {
     const adminId = req.user.id;
 
     const registration = await registrationService.approveRegistration(registrationId, adminId);
-
-    // TODO: Send SMS and email notifications
-    // sendNotification(registration.phoneNumber, registration.email, "approved");
 
     return res.status(200).json({
       message: "Registration approved successfully",
@@ -55,9 +92,6 @@ export const rejectRegistration = async (req: AuthRequest, res: Response) => {
     const adminId = req.user.id;
 
     const registration = await registrationService.rejectRegistration(registrationId, adminId);
-
-    // TODO: Send SMS and email notifications
-    // sendNotification(registration.phoneNumber, registration.email, "rejected");
 
     return res.status(200).json({
       message: "Registration rejected",
@@ -118,6 +152,12 @@ export const updateRegistrationStatus = async (req: Request, res: Response) => {
     const { registrationId } = req.params;
     const { status } = req.body;
 
+    if (!status || !['pending', 'approved', 'rejected'].includes(status)) {
+      return res.status(400).json({ 
+        message: "Invalid status value. Status must be one of: pending, approved, rejected" 
+      });
+    }
+
     const registration = await registrationService.updateRegistrationStatus(registrationId, status);
 
     if (!registration) {
@@ -132,4 +172,26 @@ export const updateRegistrationStatus = async (req: Request, res: Response) => {
     console.error("Update registration status error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
-}; 
+};
+
+export const getAllAttendees = async (req: AuthRequest, res: Response) => {
+  try {
+    const attendees = await registrationService.getAllAttendees();
+    
+    return res.status(200).json(attendees);
+  } catch (error) {
+    console.error("Get all attendees error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const getAllRegistrations = async (req: AuthRequest, res: Response) => {
+  try {
+    const registrations = await registrationService.getAllRegistrations();
+    
+    return res.status(200).json(registrations);
+  } catch (error) {
+    console.error("Get all registrations error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};

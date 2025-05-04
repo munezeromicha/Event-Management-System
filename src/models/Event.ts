@@ -2,6 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColum
 import { Admin } from "./Admin";
 import { Registration } from "./Registration";
 import { Notification } from "./Notification";
+import { Attendance } from "./Attendance";
 
 @Entity()
 export class Event {
@@ -38,4 +39,7 @@ export class Event {
 
   @OneToMany(() => Notification, notification => notification.event)
   notifications!: Notification[];
+
+  @OneToMany(() => Attendance, attendance => attendance.event)
+  attendances!: Attendance[];
 }
