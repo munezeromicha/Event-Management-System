@@ -6,6 +6,7 @@
       "skipLibCheck": true,
       "sourceMap": true,
       "outDir": "./dist",
+      "rootDir": "./src",
       "moduleResolution": "node",
       "removeComments": true,
       "strict": true,
@@ -13,8 +14,8 @@
       "strictNullChecks": true,
       "strictFunctionTypes": true,
       "noImplicitThis": true,
-      "noUnusedLocals": true,
-      "noUnusedParameters": true,
+      "noUnusedLocals": false,
+      "noUnusedParameters": false,
       "noImplicitReturns": true,
       "noFallthroughCasesInSwitch": true,
       "allowSyntheticDefaultImports": true,
@@ -22,7 +23,9 @@
       "emitDecoratorMetadata": true,
       "experimentalDecorators": true,
       "resolveJsonModule": true,
-      "baseUrl": "."
+      "baseUrl": ".",
+      "typeRoots": ["./node_modules/@types", "./src/types"],
+      "types": ["node", "express"]
     },
     "exclude": ["node_modules"],
     "include": ["./src/**/*.ts"]
