@@ -1,6 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, OneToOne, JoinColumn } from "typeorm";
 import { Event } from "./Event";
-import { Attendee } from "./Attendee";
 import { Badge } from "./Badge";
 import { FinancialSupport } from "./FinancialSupport";
 import { Admin } from "./Admin";
@@ -47,10 +46,6 @@ export class Registration {
   @ManyToOne(() => Event, event => event.registrations)
   @JoinColumn({ name: "eventId" })
   event!: Event;
-
-  @ManyToOne(() => Attendee, attendee => attendee.registrations)
-  @JoinColumn({ name: "attendeeId" })
-  attendee!: Attendee;
 
   @OneToOne(() => Badge, badge => badge.registration)
   badge!: Badge;
