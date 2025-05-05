@@ -71,6 +71,9 @@ export const registerForEvent = async (req: Request, res: Response) => {
 
 export const approveRegistration = async (req: AuthRequest, res: Response) => {
   try {
+    if (!req.user) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
     const { registrationId } = req.params;
     const adminId = req.user.id;
 
@@ -88,6 +91,9 @@ export const approveRegistration = async (req: AuthRequest, res: Response) => {
 
 export const rejectRegistration = async (req: AuthRequest, res: Response) => {
   try {
+    if (!req.user) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
     const { registrationId } = req.params;
     const adminId = req.user.id;
 

@@ -10,6 +10,11 @@ import {
 
 const router = Router();
 
+// Apply authentication middleware to all routes
+router.use((req: Request, res: Response, next: NextFunction) => {
+  authenticateJWT(req as AuthRequest, res, next);
+});
+
 /**
  * @swagger
  * /api/attendance/scan:
@@ -43,9 +48,6 @@ const router = Router();
 router.post("/scan", (req: Request, res: Response, next: NextFunction) => {
   scanAttendeeQR(req, res).catch(next);
 });
-
-// All routes below this line require authentication
-router.use(authenticateJWT);
 
 /**
  * @swagger
