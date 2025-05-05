@@ -1,33 +1,17 @@
 {
     "compilerOptions": {
-      "target": "es2018",
+      "target": "ES2020",
       "module": "commonjs",
-      "lib": ["es2018", "esnext.asynciterable"],
-      "skipLibCheck": true,
-      "sourceMap": true,
       "outDir": "./dist",
       "rootDir": "./src",
-      "moduleResolution": "node",
-      "removeComments": true,
       "strict": true,
-      "noImplicitAny": true,
-      "strictNullChecks": true,
-      "strictFunctionTypes": true,
-      "noImplicitThis": true,
-      "noUnusedLocals": false,
-      "noUnusedParameters": false,
-      "noImplicitReturns": true,
-      "noFallthroughCasesInSwitch": true,
-      "allowSyntheticDefaultImports": true,
       "esModuleInterop": true,
-      "emitDecoratorMetadata": true,
+      "skipLibCheck": true,
+      "forceConsistentCasingInFileNames": true,
       "experimentalDecorators": true,
-      "resolveJsonModule": true,
-      "baseUrl": ".",
-      "typeRoots": ["./node_modules/@types", "./src/types"],
-      "types": ["node", "express"]
+      "emitDecoratorMetadata": true
     },
-    "exclude": ["node_modules"],
-    "include": ["./src/**/*.ts"]
+    "include": ["src/**/*"],
+    "exclude": ["node_modules", "**/*.test.ts"]
   }
   
