@@ -21,8 +21,13 @@ const apiLimiter = rateLimit({
 
 const app = express();
 
+// Trust proxy for rate limiting behind reverse proxy
+app.set('trust proxy', 1);
+
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://event-management-system-i5mq.onrender.com', 'http://localhost:3000']
+    : 'http://localhost:3000',
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true 
