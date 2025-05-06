@@ -5,14 +5,15 @@
   "main": "index.js",
   "scripts": {
     "start": "node dist/server.js",
-    "dev": "ts-node --transpile-only src/server.ts",
+    "dev": "npm run migration:run && ts-node --transpile-only src/server.ts",
+    "dev:no-migrate": "ts-node --transpile-only src/server.ts",
     "build": "tsc -p .",
     "postbuild": "npm run seed",
     "seed": "ts-node --transpile-only src/scripts/seedAdmin.ts",
     "typeorm": "typeorm-ts-node-commonjs",
-    "migration:generate": "npm run typeorm -- migration:generate -d src/config/database.ts",
-    "migration:run": "npm run typeorm -- migration:run -d src/config/database.ts",
-    "migration:revert": "npm run typeorm -- migration:revert -d src/config/database.ts"
+    "migration:generate": "npm run typeorm migration:generate -- -d src/config/database.ts",
+    "migration:run": "npm run typeorm migration:run -- -d src/config/database.ts",
+    "migration:revert": "npm run typeorm migration:revert -- -d src/config/database.ts"
   },
   "keywords": [],
   "author": "",
