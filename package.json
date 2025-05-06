@@ -8,7 +8,7 @@
     "dev": "ts-node --transpile-only src/server.ts",
     "build": "tsc -p .",
     "postbuild": "npm run seed",
-    "seed": "ts-node src/scripts/seedAdmin.ts",
+    "seed": "ts-node --transpile-only src/scripts/seedAdmin.ts",
     "typeorm": "typeorm-ts-node-commonjs",
     "migration:generate": "npm run typeorm -- migration:generate -d src/config/database.ts",
     "migration:run": "npm run typeorm -- migration:run -d src/config/database.ts",

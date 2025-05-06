@@ -1,6 +1,13 @@
 import { AppDataSource } from "../config/database";
 import { Admin } from "../models/Admin";
 import bcrypt from "bcrypt";
+import dotenv from "dotenv";
+
+// Load environment variables
+dotenv.config();
+
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "password";
 
 const seedAdmin = async () => {
   try {
@@ -10,7 +17,7 @@ const seedAdmin = async () => {
 
     const adminRepository = AppDataSource.getRepository(Admin);
 
-    const existingAdmin = await adminRepository.findOne({ where: { username: "admin" } });
+    const existingAdmin = await adminRepository.findOne({ where: { username: ADMIN_USERNAME } });
     if (existingAdmin) {
       console.log("Admin user already exists.");
       await AppDataSource.destroy();
@@ -18,10 +25,10 @@ const seedAdmin = async () => {
     }
 
     console.log("Creating admin user...");
-    const hashedPassword = await bcrypt.hash("password", 10);
+    const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, 10);
 
     const newAdmin = adminRepository.create({
-      username: "admin",
+      username: ADMIN_USERNAME,
       password: hashedPassword,
     });
 
