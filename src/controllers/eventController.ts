@@ -8,9 +8,6 @@ const eventRepository = AppDataSource.getRepository(Event);
 
 export const createEvent = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
     const { 
       name, 
       eventType, 

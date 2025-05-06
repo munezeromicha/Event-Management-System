@@ -1,20 +1,21 @@
 // routes/badgeRoutes.ts
-import { Router, Request, Response, NextFunction } from "express";
-import { authenticateJWT, AuthRequest } from "../middleware/auth";
+import { Router } from "express";
+import { Request, Response, NextFunction } from "express";
 import { generateAttendeeBadge, getAttendeeBadgeByEventAndName } from "../controllers/badgeController";
+import { authenticateJWT } from "../middleware/auth";
 
 const router = Router();
 
-// Apply authentication middleware to all routes that need it
-const auth = (req: Request, res: Response, next: NextFunction) => {
-  authenticateJWT(req as AuthRequest, res, next);
-};
+// Define type for AuthRequest if it's a custom type used by authenticateJWT
+interface AuthRequest extends Request {
+  user?: any; // Define this according to your actual user structure
+}
 
 /**
  * @swagger
- * /api/badges/generate/{registrationId}:
+ * /api/badges/registrations/{registrationId}:
  *   get:
- *     summary: Generate badge for an attendee
+ *     summary: Generate attendee badge
  *     tags: [Badges]
  *     security:
  *       - bearerAuth: []
@@ -24,21 +25,42 @@ const auth = (req: Request, res: Response, next: NextFunction) => {
  *         required: true
  *         schema:
  *           type: string
- *         description: UUID of the registration
+ *       - in: query
+ *         name: download
+ *         required: false
+ *         schema:
+ *           type: boolean
+ *         description: Set to true to download the badge directly
  *     responses:
  *       200:
  *         description: Badge generated successfully
- *       401:
- *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 badgeUrl:
+ *                   type: string
+ *                 downloadUrl:
+ *                   type: string
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       400:
+ *         description: Registration not approved
  *       404:
  *         description: Registration not found
  */
 router.get(
-  "/generate/:registrationId",
-  auth,
-  async (req: Request, res: Response, next: NextFunction) => {
+  "/registrations/:registrationId", 
+  authenticateJWT,
+  // Wrap the handler function to ensure expected return type
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      await generateAttendeeBadge(req as AuthRequest, res);
+      await generateAttendeeBadge(req, res);
     } catch (error) {
       next(error);
     }
@@ -59,27 +81,30 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *         description: UUID of the event
  *       - in: path
  *         name: fullName
  *         required: true
  *         schema:
  *           type: string
- *         description: Full name of the attendee
+ *       - in: query
+ *         name: download
+ *         required: false
+ *         schema:
+ *           type: boolean
+ *         description: Set to true to download the badge directly
  *     responses:
  *       200:
- *         description: Badge retrieved successfully
- *       401:
- *         description: Unauthorized
+ *         description: Badge generated successfully
  *       404:
- *         description: Badge not found
+ *         description: Approved registration not found
  */
 router.get(
-  "/events/:eventId/attendees/:fullName",
-  auth,
-  async (req: Request, res: Response, next: NextFunction) => {
+  "/events/:eventId/attendees/:fullName", 
+  authenticateJWT,
+  // Wrap the handler function to ensure expected return type
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      await getAttendeeBadgeByEventAndName(req as AuthRequest, res);
+      await getAttendeeBadgeByEventAndName(req, res);
     } catch (error) {
       next(error);
     }

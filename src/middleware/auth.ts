@@ -3,24 +3,7 @@ import { Request, Response, NextFunction } from "express";
 import { verifyToken } from "../utils/jwt";
 
 export interface AuthRequest extends Request {
-  user?: {
-    id: string;
-    role: string;
-    [key: string]: any;
-  };
-  params: {
-    [key: string]: string;
-  };
-  query: {
-    [key: string]: string | undefined;
-  };
-  body: {
-    [key: string]: any;
-  };
-  headers: {
-    [key: string]: string | undefined;
-  };
-  method: string;
+  user?: any;
 }
 
 export const authenticateJWT = (req: AuthRequest, res: Response, next: NextFunction): void => {
