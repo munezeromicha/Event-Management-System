@@ -11,6 +11,8 @@ import attendanceRoutes from "./routes/attendanceRoutes";
 import badgeRoutes from "./routes/badgeRoutes";
 import rateLimit from "express-rate-limit";
 import path from "path";
+import healthRoutes from './routes/healthRoutes';
+import { startKeepAliveCron } from './cron/keepAlive';
 
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -71,8 +73,16 @@ app.use("/api/registrations", registrationRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/badges", badgeRoutes);
 
+// Add health routes
+app.use('/api', healthRoutes);
+
 // Setup Swagger documentation
 setupSwagger(app);
+
+// Start the keep-alive cron job
+if (process.env.NODE_ENV === 'production') {
+  startKeepAliveCron();
+}
 
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error(err.stack);
