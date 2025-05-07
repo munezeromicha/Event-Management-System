@@ -67,7 +67,9 @@ export const generateBadge = async (registration: Registration, event: Event): P
           const result = await cloudinary.uploader.upload(tempFilePath, {
             resource_type: 'raw',
             public_id: `badges/badge_${registration.registrationId}`,
-            format: 'pdf'
+            format: 'pdf',
+            folder: 'badges',
+            overwrite: true
           });
 
           // Update or create badge record

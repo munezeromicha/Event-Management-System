@@ -121,8 +121,32 @@ export const generateAttendeeBadge = async (
       where: { registrationId }
     });
 
+    let shouldRegenerate = false;
+    
     // If badge doesn't exist or needs regeneration
     if (!badge || !badge.badgeUrl) {
+      shouldRegenerate = true;
+    } else {
+      try {
+        // Try to verify if the badge exists in Cloudinary
+        const urlParts = badge.badgeUrl.split('/');
+        const uploadIndex = urlParts.indexOf('upload');
+        if (uploadIndex === -1) {
+          shouldRegenerate = true;
+        } else {
+          const publicId = urlParts.slice(uploadIndex + 2).join('/').replace(/\.pdf$/, '');
+          await cloudinary.api.resource(publicId, {
+            resource_type: 'raw',
+            type: 'upload'
+          });
+        }
+      } catch (error) {
+        console.log('Badge not found in Cloudinary, regenerating...');
+        shouldRegenerate = true;
+      }
+    }
+
+    if (shouldRegenerate) {
       console.log(`Generating new badge for registration: ${registrationId}`);
       try {
         const badgeUrl = await generateBadge(registration, registration.event);
