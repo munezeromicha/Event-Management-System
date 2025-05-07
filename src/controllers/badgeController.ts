@@ -47,9 +47,15 @@ const downloadFromCloudinary = async (url: string): Promise<Buffer> => {
   try {
     // Extract public_id from the URL
     const urlParts = url.split('/');
-    const publicId = urlParts.slice(urlParts.indexOf('upload') + 1).join('/').replace('.pdf', '');
+    const uploadIndex = urlParts.indexOf('upload');
+    if (uploadIndex === -1) {
+      throw new Error('Invalid Cloudinary URL format');
+    }
     
-    // Get the file using Cloudinary's SDK
+    // Get the public_id by removing the version and file extension
+    const publicId = urlParts.slice(uploadIndex + 2).join('/').replace(/\.pdf$/, '');
+    
+    // Get the secure URL for the file
     const result = await cloudinary.api.resource(publicId, {
       resource_type: 'raw'
     });
