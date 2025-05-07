@@ -10,6 +10,7 @@ import fs from "fs";
 import { AuthRequest } from "../middleware/auth";
 import { verifyToken } from "../utils/jwt";
 import axios from 'axios';
+import cloudinary from '../config/cloudinary';
 
 const registrationRepository = AppDataSource.getRepository(Registration);
 const eventRepository = AppDataSource.getRepository(Event);
@@ -41,12 +42,28 @@ const getAuthUser = (req: AuthRequest) => {
   }
 };
 
-// Add this helper function at the top with other helpers
+// Replace the downloadFromCloudinary function
 const downloadFromCloudinary = async (url: string): Promise<Buffer> => {
-  const response = await axios.get(url, {
-    responseType: 'arraybuffer'
-  });
-  return Buffer.from(response.data);
+  try {
+    // Extract public_id from the URL
+    const urlParts = url.split('/');
+    const publicId = urlParts.slice(urlParts.indexOf('upload') + 1).join('/').replace('.pdf', '');
+    
+    // Get the file using Cloudinary's SDK
+    const result = await cloudinary.api.resource(publicId, {
+      resource_type: 'raw'
+    });
+
+    // Download the file using the secure_url
+    const response = await axios.get(result.secure_url, {
+      responseType: 'arraybuffer'
+    });
+
+    return Buffer.from(response.data);
+  } catch (error) {
+    console.error('Error downloading from Cloudinary:', error);
+    throw new Error('Failed to download file from Cloudinary');
+  }
 };
 
 export const generateAttendeeBadge = async (
