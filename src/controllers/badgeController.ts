@@ -16,15 +16,6 @@ const registrationRepository = AppDataSource.getRepository(Registration);
 const eventRepository = AppDataSource.getRepository(Event);
 const badgeRepository = AppDataSource.getRepository(Badge);
 
-// Ensure badges directory exists
-const ensureBadgesDirectory = () => {
-  const badgesDir = path.join(process.cwd(), 'public', 'badges');
-  if (!fs.existsSync(badgesDir)) {
-    fs.mkdirSync(badgesDir, { recursive: true });
-  }
-  return badgesDir;
-};
-
 // Helper function to get authentication from either header or query param
 const getAuthUser = (req: AuthRequest) => {
   try {
@@ -42,69 +33,35 @@ const getAuthUser = (req: AuthRequest) => {
   }
 };
 
-// Replace the downloadFromCloudinary function
+// Simplified direct download function
 const downloadFromCloudinary = async (url: string): Promise<Buffer> => {
   try {
     console.log('Attempting to download from Cloudinary URL:', url);
     
-    // Extract public_id from the URL
-    const urlParts = url.split('/');
-    const uploadIndex = urlParts.indexOf('upload');
-    if (uploadIndex === -1) {
-      console.error('Invalid Cloudinary URL format:', url);
-      throw new Error('Invalid Cloudinary URL format');
+    // Direct download approach using axios - simpler and more reliable
+    const response = await axios.get(url, {
+      responseType: 'arraybuffer',
+      headers: {
+        'Accept': 'application/pdf'
+      }
+    });
+
+    if (!response.data || response.data.length === 0) {
+      console.error('Empty response from Cloudinary download');
+      throw new Error('Empty file received from Cloudinary');
     }
-    
-    // Get the public_id by removing the version and file extension
-    const publicId = urlParts.slice(uploadIndex + 2).join('/').replace(/\.pdf$/, '');
-    console.log('Extracted public_id:', publicId);
-    
-    try {
-      // Get the secure URL for the file
-      const result = await cloudinary.api.resource(publicId, {
-        resource_type: 'raw',
-        type: 'upload'
-      });
 
-      if (!result.secure_url) {
-        console.error('No secure URL in Cloudinary response:', result);
-        throw new Error('No secure URL found in Cloudinary response');
-      }
-
-      console.log('Retrieved secure URL from Cloudinary:', result.secure_url);
-
-      // Download the file using the secure_url
-      const response = await axios.get(result.secure_url, {
-        responseType: 'arraybuffer',
-        headers: {
-          'Accept': 'application/pdf'
-        }
-      });
-
-      if (!response.data || response.data.length === 0) {
-        console.error('Empty response from Cloudinary download');
-        throw new Error('Empty file received from Cloudinary');
-      }
-
-      console.log('Successfully downloaded file from Cloudinary, size:', response.data.length);
-      return Buffer.from(response.data);
-    } catch (cloudinaryError: any) {
-      console.error('Cloudinary API error:', {
-        message: cloudinaryError.message,
-        status: cloudinaryError.response?.status,
-        data: cloudinaryError.response?.data
-      });
-      
-      // If the resource is not found, try to regenerate it
-      if (cloudinaryError.response?.status === 404) {
-        console.log('Badge not found in Cloudinary, attempting to regenerate...');
-        throw new Error('BADGE_NOT_FOUND');
-      }
-      
-      throw new Error(`Cloudinary error: ${cloudinaryError.message}`);
-    }
+    console.log('Successfully downloaded file from Cloudinary, size:', response.data.length);
+    return Buffer.from(response.data);
   } catch (error: any) {
-    console.error('Error downloading from Cloudinary:', error);
+    console.error('Error downloading from Cloudinary:', error.message);
+    
+    // Check if this is a 404 error (file not found)
+    if (error.response && error.response.status === 404) {
+      console.log('Badge not found in Cloudinary, attempting to regenerate...');
+      throw new Error('BADGE_NOT_FOUND');
+    }
+    
     throw error;
   }
 };
@@ -155,21 +112,9 @@ export const generateAttendeeBadge = async (
 
     let shouldRegenerate = false;
     
-    // If badge doesn't exist or needs regeneration
+    // Check if badge exists and has a valid URL
     if (!badge || !badge.badgeUrl) {
       shouldRegenerate = true;
-    } else {
-      try {
-        // Try to verify if the badge exists in Cloudinary
-        await downloadFromCloudinary(badge.badgeUrl);
-      } catch (error: any) {
-        if (error.message === 'BADGE_NOT_FOUND') {
-          console.log('Badge not found in Cloudinary, will regenerate');
-          shouldRegenerate = true;
-        } else {
-          throw error;
-        }
-      }
     }
 
     if (shouldRegenerate) {
@@ -196,7 +141,33 @@ export const generateAttendeeBadge = async (
     if (returnFile) {
       try {
         // Download the file from Cloudinary
-        const pdfBuffer = await downloadFromCloudinary(badge.badgeUrl);
+        let pdfBuffer: Buffer;
+        
+        try {
+          // First try to download directly
+          pdfBuffer = await downloadFromCloudinary(badge.badgeUrl);
+        } catch (downloadError: any) {
+          // If badge not found or other error, try to regenerate it
+          if (downloadError.message === 'BADGE_NOT_FOUND') {
+            console.log('Badge not found in Cloudinary, regenerating...');
+            const newBadgeUrl = await generateBadge(registration, registration.event);
+            
+            // Get the updated badge record
+            badge = await badgeRepository.findOne({
+              where: { registrationId }
+            });
+            
+            if (!badge || !badge.badgeUrl) {
+              throw new Error('Failed to regenerate badge');
+            }
+            
+            // Try downloading the regenerated badge
+            pdfBuffer = await downloadFromCloudinary(badge.badgeUrl);
+          } else {
+            // If it's another error, re-throw it
+            throw downloadError;
+          }
+        }
         
         // Set appropriate headers
         res.setHeader('Content-Type', 'application/pdf');
@@ -207,27 +178,10 @@ export const generateAttendeeBadge = async (
         res.send(pdfBuffer);
       } catch (error: any) {
         console.error("Error downloading badge:", error);
-        if (error.message === 'BADGE_NOT_FOUND') {
-          // If badge not found, try to regenerate it
-          try {
-            const badgeUrl = await generateBadge(registration, registration.event);
-            badge = await badgeRepository.findOne({
-              where: { registrationId }
-            });
-            
-            if (badge && badge.badgeUrl) {
-              const pdfBuffer = await downloadFromCloudinary(badge.badgeUrl);
-              res.setHeader('Content-Type', 'application/pdf');
-              res.setHeader('Content-Disposition', `attachment; filename="badge-${registrationId}.pdf"`);
-              res.setHeader('Content-Length', pdfBuffer.length);
-              res.send(pdfBuffer);
-              return;
-            }
-          } catch (regenerateError) {
-            console.error("Error regenerating badge:", regenerateError);
-          }
-        }
-        res.status(500).json({ message: "Failed to download badge" });
+        res.status(500).json({ 
+          message: "Failed to download badge", 
+          error: error.message 
+        });
       }
     } else {
       res.status(200).json({
@@ -239,93 +193,5 @@ export const generateAttendeeBadge = async (
   } catch (error: any) {
     console.error("Badge generation error:", error);
     res.status(500).json({ message: "Failed to generate badge", error: error.message });
-  }
-};
-
-export const getAttendeeBadgeByEventAndName = async (
-  req: AuthRequest, 
-  res: Response
-): Promise<void> => {
-  try {
-    const user = getAuthUser(req);
-    if (!user) {
-      res.status(401).json({ message: "Authentication required" });
-      return;
-    }
-    
-    const { eventId, fullName } = req.params;
-    
-    const registration = await registrationRepository.findOne({
-      where: { 
-        event: { eventId },
-        fullName,
-        status: "approved" 
-      },
-      relations: ['event']
-    });
-
-    if (!registration) {
-      res.status(404).json({ message: "Approved registration not found" });
-      return;
-    }
-
-    if (!registration.event) {
-      res.status(404).json({ message: "Event not found for this registration" });
-      return;
-    }
-
-    // Check if badge already exists in database
-    let badge = await badgeRepository.findOne({
-      where: { registrationId: registration.registrationId }
-    });
-
-    // If badge doesn't exist or needs regeneration
-    if (!badge || !badge.badgeUrl) {
-      console.log(`Generating new badge for registration: ${registration.registrationId}`);
-      try {
-        const badgeUrl = await generateBadge(registration, registration.event);
-        badge = await badgeRepository.findOne({
-          where: { registrationId: registration.registrationId }
-        });
-      } catch (error) {
-        console.error("Error generating badge:", error);
-        res.status(500).json({ message: "Failed to generate badge" });
-        return;
-      }
-    }
-
-    if (!badge || !badge.badgeUrl) {
-      res.status(500).json({ message: "Badge URL not found" });
-      return;
-    }
-
-    const returnFile = req.query.download === 'true';
-    
-    if (returnFile) {
-      try {
-        // Download the file from Cloudinary
-        const pdfBuffer = await downloadFromCloudinary(badge.badgeUrl);
-        
-        // Set appropriate headers
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="badge-${registration.registrationId}.pdf"`);
-        res.setHeader('Content-Length', pdfBuffer.length);
-        
-        // Send the file
-        res.send(pdfBuffer);
-      } catch (error) {
-        console.error("Error downloading badge:", error);
-        res.status(500).json({ message: "Failed to download badge" });
-      }
-    } else {
-      res.status(200).json({
-        message: "Badge generated successfully",
-        badgeUrl: badge.badgeUrl,
-        downloadUrl: `/api/badges/events/${eventId}/attendees/${encodeURIComponent(fullName)}?download=true`
-      });
-    }
-  } catch (error: any) {
-    console.error("Badge lookup error:", error);
-    res.status(500).json({ message: "Failed to find badge", error: error.message });
   }
 };
