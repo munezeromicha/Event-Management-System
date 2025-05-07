@@ -9,6 +9,7 @@ import path from "path";
 import fs from "fs";
 import { AuthRequest } from "../middleware/auth";
 import { verifyToken } from "../utils/jwt";
+import axios from 'axios';
 
 const registrationRepository = AppDataSource.getRepository(Registration);
 const eventRepository = AppDataSource.getRepository(Event);
@@ -38,6 +39,14 @@ const getAuthUser = (req: AuthRequest) => {
     console.error("Auth error:", error);
     return null;
   }
+};
+
+// Add this helper function at the top with other helpers
+const downloadFromCloudinary = async (url: string): Promise<Buffer> => {
+  const response = await axios.get(url, {
+    responseType: 'arraybuffer'
+  });
+  return Buffer.from(response.data);
 };
 
 export const generateAttendeeBadge = async (
@@ -107,8 +116,21 @@ export const generateAttendeeBadge = async (
     const returnFile = req.query.download === 'true';
     
     if (returnFile) {
-      // Redirect to Cloudinary URL
-      res.redirect(badge.badgeUrl);
+      try {
+        // Download the file from Cloudinary
+        const pdfBuffer = await downloadFromCloudinary(badge.badgeUrl);
+        
+        // Set appropriate headers
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="badge-${registrationId}.pdf"`);
+        res.setHeader('Content-Length', pdfBuffer.length);
+        
+        // Send the file
+        res.send(pdfBuffer);
+      } catch (error) {
+        console.error("Error downloading badge:", error);
+        res.status(500).json({ message: "Failed to download badge" });
+      }
     } else {
       res.status(200).json({
         message: "Badge generated successfully",
@@ -182,8 +204,21 @@ export const getAttendeeBadgeByEventAndName = async (
     const returnFile = req.query.download === 'true';
     
     if (returnFile) {
-      // Redirect to Cloudinary URL
-      res.redirect(badge.badgeUrl);
+      try {
+        // Download the file from Cloudinary
+        const pdfBuffer = await downloadFromCloudinary(badge.badgeUrl);
+        
+        // Set appropriate headers
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="badge-${registration.registrationId}.pdf"`);
+        res.setHeader('Content-Length', pdfBuffer.length);
+        
+        // Send the file
+        res.send(pdfBuffer);
+      } catch (error) {
+        console.error("Error downloading badge:", error);
+        res.status(500).json({ message: "Failed to download badge" });
+      }
     } else {
       res.status(200).json({
         message: "Badge generated successfully",
