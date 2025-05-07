@@ -45,35 +45,67 @@ const getAuthUser = (req: AuthRequest) => {
 // Replace the downloadFromCloudinary function
 const downloadFromCloudinary = async (url: string): Promise<Buffer> => {
   try {
+    console.log('Attempting to download from Cloudinary URL:', url);
+    
     // Extract public_id from the URL
     const urlParts = url.split('/');
     const uploadIndex = urlParts.indexOf('upload');
     if (uploadIndex === -1) {
+      console.error('Invalid Cloudinary URL format:', url);
       throw new Error('Invalid Cloudinary URL format');
     }
     
     // Get the public_id by removing the version and file extension
     const publicId = urlParts.slice(uploadIndex + 2).join('/').replace(/\.pdf$/, '');
+    console.log('Extracted public_id:', publicId);
     
-    // Get the secure URL for the file
-    const result = await cloudinary.api.resource(publicId, {
-      resource_type: 'raw',
-      type: 'upload'
-    });
+    try {
+      // Get the secure URL for the file
+      const result = await cloudinary.api.resource(publicId, {
+        resource_type: 'raw',
+        type: 'upload'
+      });
 
-    if (!result.secure_url) {
-      throw new Error('No secure URL found in Cloudinary response');
+      if (!result.secure_url) {
+        console.error('No secure URL in Cloudinary response:', result);
+        throw new Error('No secure URL found in Cloudinary response');
+      }
+
+      console.log('Retrieved secure URL from Cloudinary:', result.secure_url);
+
+      // Download the file using the secure_url
+      const response = await axios.get(result.secure_url, {
+        responseType: 'arraybuffer',
+        headers: {
+          'Accept': 'application/pdf'
+        }
+      });
+
+      if (!response.data || response.data.length === 0) {
+        console.error('Empty response from Cloudinary download');
+        throw new Error('Empty file received from Cloudinary');
+      }
+
+      console.log('Successfully downloaded file from Cloudinary, size:', response.data.length);
+      return Buffer.from(response.data);
+    } catch (cloudinaryError: any) {
+      console.error('Cloudinary API error:', {
+        message: cloudinaryError.message,
+        status: cloudinaryError.response?.status,
+        data: cloudinaryError.response?.data
+      });
+      
+      // If the resource is not found, try to regenerate it
+      if (cloudinaryError.response?.status === 404) {
+        console.log('Badge not found in Cloudinary, attempting to regenerate...');
+        throw new Error('BADGE_NOT_FOUND');
+      }
+      
+      throw new Error(`Cloudinary error: ${cloudinaryError.message}`);
     }
-
-    // Download the file using the secure_url
-    const response = await axios.get(result.secure_url, {
-      responseType: 'arraybuffer'
-    });
-
-    return Buffer.from(response.data);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error downloading from Cloudinary:', error);
-    throw new Error('Failed to download file from Cloudinary');
+    throw error;
   }
 };
 
@@ -129,20 +161,14 @@ export const generateAttendeeBadge = async (
     } else {
       try {
         // Try to verify if the badge exists in Cloudinary
-        const urlParts = badge.badgeUrl.split('/');
-        const uploadIndex = urlParts.indexOf('upload');
-        if (uploadIndex === -1) {
+        await downloadFromCloudinary(badge.badgeUrl);
+      } catch (error: any) {
+        if (error.message === 'BADGE_NOT_FOUND') {
+          console.log('Badge not found in Cloudinary, will regenerate');
           shouldRegenerate = true;
         } else {
-          const publicId = urlParts.slice(uploadIndex + 2).join('/').replace(/\.pdf$/, '');
-          await cloudinary.api.resource(publicId, {
-            resource_type: 'raw',
-            type: 'upload'
-          });
+          throw error;
         }
-      } catch (error) {
-        console.log('Badge not found in Cloudinary, regenerating...');
-        shouldRegenerate = true;
       }
     }
 
@@ -179,8 +205,28 @@ export const generateAttendeeBadge = async (
         
         // Send the file
         res.send(pdfBuffer);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error downloading badge:", error);
+        if (error.message === 'BADGE_NOT_FOUND') {
+          // If badge not found, try to regenerate it
+          try {
+            const badgeUrl = await generateBadge(registration, registration.event);
+            badge = await badgeRepository.findOne({
+              where: { registrationId }
+            });
+            
+            if (badge && badge.badgeUrl) {
+              const pdfBuffer = await downloadFromCloudinary(badge.badgeUrl);
+              res.setHeader('Content-Type', 'application/pdf');
+              res.setHeader('Content-Disposition', `attachment; filename="badge-${registrationId}.pdf"`);
+              res.setHeader('Content-Length', pdfBuffer.length);
+              res.send(pdfBuffer);
+              return;
+            }
+          } catch (regenerateError) {
+            console.error("Error regenerating badge:", regenerateError);
+          }
+        }
         res.status(500).json({ message: "Failed to download badge" });
       }
     } else {
