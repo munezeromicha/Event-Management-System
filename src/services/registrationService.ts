@@ -48,12 +48,27 @@ export const registerForEvent = async (
   }
 
   // Check if already registered with same identification
-  const existingRegistration = await registrationRepository.findOne({
-    where: [
-      { event: { eventId }, nationalId: registrationData.nationalId },
-      { event: { eventId }, passport: registrationData.passport }
-    ]
-  });
+  const whereConditions = [];
+  
+  if (registrationData.nationalId) {
+    whereConditions.push({ 
+      event: { eventId }, 
+      nationalId: registrationData.nationalId 
+    });
+  }
+  
+  if (registrationData.passport) {
+    whereConditions.push({ 
+      event: { eventId }, 
+      passport: registrationData.passport 
+    });
+  }
+
+  const existingRegistration = whereConditions.length > 0 
+    ? await registrationRepository.findOne({
+        where: whereConditions
+      })
+    : null;
 
   if (existingRegistration) {
     throw new Error("Already registered for this event");
