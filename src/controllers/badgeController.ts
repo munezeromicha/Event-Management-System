@@ -57,8 +57,13 @@ const downloadFromCloudinary = async (url: string): Promise<Buffer> => {
     
     // Get the secure URL for the file
     const result = await cloudinary.api.resource(publicId, {
-      resource_type: 'raw'
+      resource_type: 'raw',
+      type: 'upload'
     });
+
+    if (!result.secure_url) {
+      throw new Error('No secure URL found in Cloudinary response');
+    }
 
     // Download the file using the secure_url
     const response = await axios.get(result.secure_url, {
