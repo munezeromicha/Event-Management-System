@@ -233,62 +233,51 @@ export const generateAttendeeBadge = async (
       return;
     }
 
-    // Check if badge already exists in database
-    let badge = await badgeRepository.findOne({
-      where: { registrationId }
-    });
-
-    console.log('Existing badge found:', badge ? 'Yes' : 'No');
-    console.log('Badge URL:', badge?.badgeUrl);
-
-    let shouldRegenerate = false;
-    
-    // Check if badge exists and has a valid URL
-    if (!badge || !badge.badgeUrl) {
-      shouldRegenerate = true;
-    }
-
-    if (shouldRegenerate) {
-      console.log(`Generating new badge for registration: ${registrationId}`);
-      try {
-        const badgeUrl = await generateBadge(registration, registration.event);
-        console.log('Badge generated with URL:', badgeUrl);
-        
-        badge = await badgeRepository.findOne({
-          where: { registrationId }
-        });
-        
-        console.log('Badge after generation:', badge);
-      } catch (error) {
-        console.error("Error generating badge:", error);
-        res.status(500).json({ message: "Failed to generate badge" });
-        return;
-      }
-    }
-
-    if (!badge || !badge.badgeUrl) {
-      console.error('Badge URL still not found after generation');
-      res.status(500).json({ message: "Badge URL not found" });
-      return;
-    }
-
-    const returnFile = req.query.download === 'true';
-    console.log('Download requested:', returnFile);
-    
-    if (returnFile) {
-      await handleBadgeDownload(
-        badge,
-        registration,
-        registration.event,
-        res,
-        `badge-${registrationId}.pdf`
-      );
-    } else {
-      res.status(200).json({
-        message: "Badge generated successfully",
-        badgeUrl: badge.badgeUrl,
-        downloadUrl: `/api/badges/registrations/${registrationId}?download=true`
+    // Always regenerate the badge to ensure it's fresh
+    console.log(`Generating new badge for registration: ${registrationId}`);
+    try {
+      const badgeUrl = await generateBadge(registration, registration.event);
+      console.log('Badge generated with URL:', badgeUrl);
+      
+      const badge = await badgeRepository.findOne({
+        where: { registrationId }
       });
+      
+      if (!badge || !badge.badgeUrl) {
+        throw new Error('Badge generation failed - no URL returned');
+      }
+
+      const returnFile = req.query.download === 'true';
+      console.log('Download requested:', returnFile);
+      
+      if (returnFile) {
+        try {
+          const pdfBuffer = await downloadFromCloudinary(badge.badgeUrl);
+          
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `attachment; filename="badge-${registrationId}.pdf"`);
+          res.setHeader('Content-Length', pdfBuffer.length);
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+          
+          res.send(pdfBuffer);
+        } catch (downloadError) {
+          console.error('Error downloading badge:', downloadError);
+          res.status(500).json({ 
+            message: "Failed to download badge", 
+            error: downloadError instanceof Error ? downloadError.message : 'Unknown error' 
+          });
+        }
+      } else {
+        res.status(200).json({
+          message: "Badge generated successfully",
+          badgeUrl: badge.badgeUrl,
+          downloadUrl: `/api/badges/registrations/${registrationId}?download=true`
+        });
+      }
+    } catch (error) {
+      console.error("Error generating badge:", error);
+      res.status(500).json({ message: "Failed to generate badge" });
+      return;
     }
   } catch (error: any) {
     console.error("Badge generation error:", error);
