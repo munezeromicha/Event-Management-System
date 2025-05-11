@@ -37,24 +37,56 @@ const getAuthUser = (req: AuthRequest) => {
     return null;
   } catch (error: unknown) {
     console.error("Auth error:", error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error('Authentication failed: ' + errorMessage);
+    if (error instanceof Error) {
+      throw new Error('Authentication failed: ' + error.message);
+    } else {
+      throw new Error('Authentication failed: Unknown error');
+    }
   }
 };
 
 // Simplified direct download function - No auth needed for Cloudinary
 const downloadFromCloudinary = async (url: string): Promise<Buffer> => {
   try {
+    console.log('=== Cloudinary Download Debug ===');
     console.log('Attempting to download from Cloudinary URL:', url);
+    
+    // Check if URL is valid
+    if (!url || typeof url !== 'string') {
+      throw new Error('Invalid URL provided');
+    }
+    
+    // Ensure URL starts with https://res.cloudinary.com
+    if (!url.startsWith('https://res.cloudinary.com')) {
+      console.warn('URL does not start with https://res.cloudinary.com:', url);
+    }
     
     // Direct download approach using axios - simpler and more reliable
     const response = await axios.get(url, {
       responseType: 'arraybuffer',
       headers: {
-        'Accept': 'application/pdf'
+        'Accept': 'application/pdf',
+        'User-Agent': 'Event-Management-System'
       },
-      timeout: 30000 // 30 second timeout
+      timeout: 30000, // 30 second timeout
+      validateStatus: function (status) {
+        return status < 500; // Resolve only if the status code is less than 500
+      }
     });
+
+    console.log('Cloudinary response status:', response.status);
+    console.log('Cloudinary response headers:', response.headers);
+
+    if (response.status === 401) {
+      console.error('Unauthorized access to Cloudinary resource');
+      console.error('URL that failed:', url);
+      throw new Error('Unauthorized access to Cloudinary resource. Check URL permissions.');
+    }
+
+    if (response.status === 404) {
+      console.log('Badge not found in Cloudinary, attempting to regenerate...');
+      throw new Error('BADGE_NOT_FOUND');
+    }
 
     if (!response.data || response.data.length === 0) {
       console.error('Empty response from Cloudinary download');
@@ -65,6 +97,10 @@ const downloadFromCloudinary = async (url: string): Promise<Buffer> => {
     return Buffer.from(response.data);
   } catch (error: any) {
     console.error('Error downloading from Cloudinary:', error.message);
+    console.error('Full error:', error);
+    
+    // Log the URL that failed
+    console.error('Failed URL:', url);
     
     // Check if this is a 404 error (file not found)
     if (error.response && error.response.status === 404) {
@@ -85,6 +121,10 @@ const handleBadgeDownload = async (
   filename: string
 ): Promise<void> => {
   try {
+    console.log('=== Badge Download Process ===');
+    console.log('Badge URL:', badge.badgeUrl);
+    console.log('Registration ID:', registration.registrationId);
+    
     // Download the file from Cloudinary
     let pdfBuffer: Buffer;
     
@@ -92,6 +132,8 @@ const handleBadgeDownload = async (
       // First try to download directly
       pdfBuffer = await downloadFromCloudinary(badge.badgeUrl);
     } catch (downloadError: any) {
+      console.error('Download error:', downloadError.message);
+      
       // If badge not found or other error, try to regenerate it
       if (downloadError.message === 'BADGE_NOT_FOUND') {
         console.log('Badge not found in Cloudinary, regenerating...');
@@ -106,6 +148,7 @@ const handleBadgeDownload = async (
           throw new Error('Failed to regenerate badge');
         }
         
+        console.log('New badge URL after regeneration:', updatedBadge.badgeUrl);
         badge.badgeUrl = updatedBadge.badgeUrl;
         
         // Try downloading the regenerated badge
@@ -138,7 +181,7 @@ export const generateAttendeeBadge = async (
   res: Response
 ): Promise<void> => {
   try {
-    console.log('Starting badge generation process...');
+    console.log('=== Badge Generation Process Started ===');
     console.log('Headers:', req.headers);
     console.log('User from middleware:', req.user);
     
@@ -182,6 +225,9 @@ export const generateAttendeeBadge = async (
       where: { registrationId }
     });
 
+    console.log('Existing badge found:', badge ? 'Yes' : 'No');
+    console.log('Badge URL:', badge?.badgeUrl);
+
     let shouldRegenerate = false;
     
     // Check if badge exists and has a valid URL
@@ -193,9 +239,13 @@ export const generateAttendeeBadge = async (
       console.log(`Generating new badge for registration: ${registrationId}`);
       try {
         const badgeUrl = await generateBadge(registration, registration.event);
+        console.log('Badge generated with URL:', badgeUrl);
+        
         badge = await badgeRepository.findOne({
           where: { registrationId }
         });
+        
+        console.log('Badge after generation:', badge);
       } catch (error) {
         console.error("Error generating badge:", error);
         res.status(500).json({ message: "Failed to generate badge" });
@@ -204,6 +254,7 @@ export const generateAttendeeBadge = async (
     }
 
     if (!badge || !badge.badgeUrl) {
+      console.error('Badge URL still not found after generation');
       res.status(500).json({ message: "Badge URL not found" });
       return;
     }
