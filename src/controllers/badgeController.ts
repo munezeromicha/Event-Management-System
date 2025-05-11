@@ -19,21 +19,30 @@ const badgeRepository = AppDataSource.getRepository(Badge);
 // Helper function to get authentication from either header or query param
 const getAuthUser = (req: AuthRequest) => {
   try {
+    // First check if user is already set by middleware
     if (req.user) {
+      console.log('User found in request:', req.user);
       return req.user;
     }
+    
+    // Fallback to query token if present
     const queryToken = req.query.token as string;
     if (queryToken) {
+      console.log('Verifying query token');
       return verifyToken(queryToken);
     }
+    
+    // No authentication found
+    console.log('No authentication found in request');
     return null;
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Auth error:", error);
-    return null;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error('Authentication failed: ' + errorMessage);
   }
 };
 
-// Simplified direct download function
+// Simplified direct download function - No auth needed for Cloudinary
 const downloadFromCloudinary = async (url: string): Promise<Buffer> => {
   try {
     console.log('Attempting to download from Cloudinary URL:', url);
@@ -43,7 +52,8 @@ const downloadFromCloudinary = async (url: string): Promise<Buffer> => {
       responseType: 'arraybuffer',
       headers: {
         'Accept': 'application/pdf'
-      }
+      },
+      timeout: 30000 // 30 second timeout
     });
 
     if (!response.data || response.data.length === 0) {
@@ -110,6 +120,7 @@ const handleBadgeDownload = async (
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', pdfBuffer.length);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     
     // Send the file
     res.send(pdfBuffer);
@@ -127,8 +138,13 @@ export const generateAttendeeBadge = async (
   res: Response
 ): Promise<void> => {
   try {
+    console.log('Starting badge generation process...');
+    console.log('Headers:', req.headers);
+    console.log('User from middleware:', req.user);
+    
     const user = getAuthUser(req);
     if (!user) {
+      console.log('Authentication failed - no user found');
       res.status(401).json({ message: "Authentication required" });
       return;
     }
@@ -193,6 +209,7 @@ export const generateAttendeeBadge = async (
     }
 
     const returnFile = req.query.download === 'true';
+    console.log('Download requested:', returnFile);
     
     if (returnFile) {
       await handleBadgeDownload(
@@ -211,6 +228,7 @@ export const generateAttendeeBadge = async (
     }
   } catch (error: any) {
     console.error("Badge generation error:", error);
+    console.error("Stack trace:", error.stack);
     res.status(500).json({ message: "Failed to generate badge", error: error.message });
   }
 };
