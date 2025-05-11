@@ -45,6 +45,17 @@ const getAuthUser = (req: AuthRequest) => {
   }
 };
 
+// Helper function to get a fresh signed URL for a badge
+const getSignedBadgeUrl = (publicId: string): string => {
+  return cloudinary.url(publicId, {
+    resource_type: 'raw',
+    format: 'pdf',
+    secure: true,
+    sign_url: true,
+    expires_at: Math.floor(Date.now() / 1000) + 3600 // 1 hour from now
+  });
+};
+
 // Simplified direct download function - No auth needed for Cloudinary
 const downloadFromCloudinary = async (url: string): Promise<Buffer> => {
   try {
@@ -78,9 +89,11 @@ const downloadFromCloudinary = async (url: string): Promise<Buffer> => {
     console.log('Cloudinary response headers:', response.headers);
 
     if (response.status === 401) {
-      console.error('Unauthorized access to Cloudinary resource');
-      console.error('URL that failed:', url);
-      throw new Error('Unauthorized access to Cloudinary resource. Check URL permissions.');
+      // If unauthorized, try to get a fresh signed URL
+      const publicId = url.split('/').slice(-1)[0].split('.')[0]; // Extract public_id from URL
+      const freshSignedUrl = getSignedBadgeUrl(`badges/${publicId}`);
+      console.log('Retrying with fresh signed URL:', freshSignedUrl);
+      return downloadFromCloudinary(freshSignedUrl);
     }
 
     if (response.status === 404) {

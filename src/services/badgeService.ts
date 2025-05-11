@@ -68,16 +68,19 @@ export const generateBadge = async (registration: Registration, event: Event): P
         try {
           console.log('PDF created, uploading to Cloudinary...');
           
-          // Upload to Cloudinary with public access
+          // Upload to Cloudinary with enhanced security settings
           const result = await cloudinary.uploader.upload(tempFilePath, {
             resource_type: 'raw',
             public_id: `badges/badge_${registration.registrationId}`,
             format: 'pdf',
             folder: 'badges',
             overwrite: true,
-            access_mode: 'public', // Ensure public access
-            type: 'upload', // Upload type
-            invalidate: true // Invalidate existing cache
+            access_mode: 'public',
+            type: 'upload',
+            invalidate: true,
+            sign_url: true, // Enable signed URLs for this upload
+            use_filename: true, // Use the filename in the URL
+            unique_filename: false // Don't add random string to filename
           });
 
           console.log('Upload result:', {
@@ -86,19 +89,28 @@ export const generateBadge = async (registration: Registration, event: Event): P
             url: result.url
           });
 
+          // Generate a signed URL with an expiration time (e.g., 1 hour)
+          const signedUrl = cloudinary.url(result.public_id, {
+            resource_type: 'raw',
+            format: 'pdf',
+            secure: true,
+            sign_url: true,
+            expires_at: Math.floor(Date.now() / 1000) + 3600 // 1 hour from now
+          });
+
           // Update or create badge record
           let badge = await badgeRepository.findOne({
             where: { registrationId: registration.registrationId }
           });
 
           if (badge) {
-            badge.badgeUrl = result.secure_url; // Always use secure_url
+            badge.badgeUrl = signedUrl;
             badge.qrCode = registration.registrationId;
           } else {
             badge = new Badge();
             badge.registrationId = registration.registrationId;
             badge.qrCode = registration.registrationId;
-            badge.badgeUrl = result.secure_url; // Always use secure_url
+            badge.badgeUrl = signedUrl;
           }
 
           await badgeRepository.save(badge);
@@ -107,7 +119,7 @@ export const generateBadge = async (registration: Registration, event: Event): P
           // Delete temp file
           fs.unlinkSync(tempFilePath);
 
-          resolve(result.secure_url);
+          resolve(signedUrl);
         } catch (error) {
           console.error('Error uploading to Cloudinary:', error);
           reject(error);
