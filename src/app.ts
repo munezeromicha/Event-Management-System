@@ -27,8 +27,12 @@ const app = express();
 app.set('trust proxy', 1);
 
 app.use(cors({
-  origin: ['http://localhost:3001', 'http://localhost:3000'], // Add your frontend URL
-  credentials: true
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://event-management-system-i5mq.onrender.com']
+    : ['http://localhost:3000', 'http://localhost:3001'], // Frontend URLs
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(
