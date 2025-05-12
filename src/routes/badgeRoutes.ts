@@ -82,6 +82,17 @@ router.get(
   flexibleAuth,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const download = req.query.download === 'true';
+      
+      if (download) {
+        // Set headers for direct download
+        res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Type');
+      }
+      
       await generateAttendeeBadge(req, res);
     } catch (error) {
       next(error);
