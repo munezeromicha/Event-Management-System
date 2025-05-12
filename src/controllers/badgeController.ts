@@ -1,14 +1,14 @@
 // controllers/badgeController.ts
 import { Response } from "express";
-import { generateBadge } from "../services/badgeService";
+import { generateBadge } from "../services/simpleBadgeService";
 import { AppDataSource } from "../config/database";
 import { Registration } from "../models/Registration";
 import { Event } from "../models/Event";
 import { Badge } from "../models/Badge";
+import path from "path";
+import fs from "fs";
 import { AuthRequest } from "../middleware/auth";
 import { verifyToken } from "../utils/jwt";
-import axios from 'axios';
-import cloudinary from '../config/cloudinary';
 
 const registrationRepository = AppDataSource.getRepository(Registration);
 const eventRepository = AppDataSource.getRepository(Event);
@@ -17,84 +17,76 @@ const badgeRepository = AppDataSource.getRepository(Badge);
 // Helper function to get authentication from either header or query param
 const getAuthUser = (req: AuthRequest) => {
   try {
+    // Log for debugging
+    console.log('Auth debug:', {
+      headers: req.headers.authorization ? 'Bearer token present' : 'No Auth header',
+      queryToken: req.query.token ? 'Token present' : 'No query token',
+      user: req.user ? 'User present in request' : 'No user in request'
+    });
+    
     // First check if user is already set by middleware
     if (req.user) {
       return req.user;
     }
     
-    // Fallback to query token if present
-    const queryToken = req.query.token as string;
-    if (queryToken) {
-      return verifyToken(queryToken);
-    }
-    
-    // No authentication found
-    return null;
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      throw new Error('Authentication failed: ' + error.message);
-    } else {
-      throw new Error('Authentication failed: Unknown error');
-    }
-  }
-};
-
-// Improved function to get a fresh signed URL for a badge
-const getSignedBadgeUrl = (publicId: string): string => {
-  return cloudinary.url(publicId, {
-    resource_type: 'raw',
-    format: 'pdf',
-    secure: true,
-    sign_url: true,
-    expires_at: Math.floor(Date.now() / 1000) + 3600 // 1 hour from now
-  });
-};
-
-// Improved download function for Cloudinary
-const downloadFromCloudinary = async (url: string): Promise<Buffer> => {
-  try {
-    // Extract the public_id from the URL if it's a Cloudinary URL
-    let publicId = '';
-    
-    if (url.includes('cloudinary.com')) {
-      // Extract the public ID from the URL
-      const urlParts = url.split('/upload/');
-      if (urlParts.length > 1) {
-        publicId = urlParts[1].split('.')[0];
+    // Check header for token
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.substring(7); // Remove 'Bearer '
+        return verifyToken(token);
+      } catch (err) {
+        console.error('Error verifying header token:', err);
       }
     }
     
-    // If we've extracted a public ID, get a fresh signed URL
-    if (publicId) {
-      url = getSignedBadgeUrl(publicId);
+    // Fallback to query token if present
+    const queryToken = req.query.token as string;
+    if (queryToken) {
+      try {
+        return verifyToken(queryToken);
+      } catch (err) {
+        console.error('Error verifying query token:', err);
+      }
     }
     
-    // Direct download approach using axios
-    const response = await axios.get(url, {
-      responseType: 'arraybuffer',
-      headers: {
-        'Accept': 'application/pdf',
-        'User-Agent': 'Event-Management-System'
-      },
-      timeout: 30000 // 30 second timeout
-    });
-
-    if (!response.data || response.data.length === 0) {
-      throw new Error('Empty file received from Cloudinary');
-    }
-
-    return Buffer.from(response.data);
-  } catch (error: any) {
-    // Check if this is a 404 error (file not found)
-    if (error.response && error.response.status === 404) {
-      throw new Error('BADGE_NOT_FOUND');
-    }
-    
-    throw error;
+    // No authentication found
+    console.log('No valid authentication found in request');
+    return null;
+  } catch (error: unknown) {
+    console.error("Auth error:", error);
+    return null;
   }
 };
 
-// Helper function to handle the badge download process
+// Simple helper function to serve PDF file
+const servePdfFile = (filePath: string, res: Response, filename: string): void => {
+  if (!fs.existsSync(filePath)) {
+    res.status(404).json({ 
+      message: "Badge file not found",
+      details: "The badge file could not be found on the server"
+    });
+    return;
+  }
+  
+  const fileStream = fs.createReadStream(filePath);
+  
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  
+  fileStream.pipe(res);
+  
+  fileStream.on('error', (err) => {
+    console.error('Error serving PDF:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        message: "Error serving badge file",
+        details: err.message
+      });
+    }
+  });
+};
+
 const handleBadgeDownload = async (
   badge: Badge,
   registration: Registration,
@@ -103,48 +95,30 @@ const handleBadgeDownload = async (
   filename: string
 ): Promise<void> => {
   try {
-    let pdfBuffer: Buffer;
+    const filePath = path.join(process.cwd(), 'public', badge.badgeUrl.substring(1));
     
-    try {
-      // First try to download directly
-      pdfBuffer = await downloadFromCloudinary(badge.badgeUrl);
-    } catch (downloadError: any) {
-      // If badge not found or other error, try to regenerate it
-      if (downloadError.message === 'BADGE_NOT_FOUND') {
-        const newBadgeUrl = await generateBadge(registration, event);
-        
-        // Get the updated badge record
-        const updatedBadge = await badgeRepository.findOne({
-          where: { registrationId: registration.registrationId }
-        });
-        
-        if (!updatedBadge || !updatedBadge.badgeUrl) {
-          throw new Error('Failed to regenerate badge');
-        }
-        
-        badge.badgeUrl = updatedBadge.badgeUrl;
-        
-        // Try downloading the regenerated badge
-        pdfBuffer = await downloadFromCloudinary(badge.badgeUrl);
-      } else {
-        // If it's another error, re-throw it
-        throw downloadError;
-      }
+    if (!fs.existsSync(filePath)) {
+      // If file doesn't exist, try to regenerate it
+      const newBadgeUrl = await generateBadge(registration, event);
+      badge.badgeUrl = newBadgeUrl;
     }
+
+    const fileStream = fs.createReadStream(filePath);
     
-    // Set appropriate headers
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     
-    // Send the file
-    res.send(pdfBuffer);
-  } catch (error: any) {
-    res.status(500).json({ 
-      message: "Failed to download badge", 
-      error: error.message 
+    fileStream.pipe(res);
+    
+    fileStream.on('error', (err) => {
+      console.error('Error serving PDF:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Error serving badge file" });
+      }
     });
+  } catch (error) {
+    console.error('Error downloading badge:', error);
+    res.status(500).json({ message: "Failed to download badge" });
   }
 };
 
@@ -154,17 +128,15 @@ export const generateAttendeeBadge = async (
 ): Promise<void> => {
   try {
     console.log('=== Badge Generation Process Started ===');
-    console.log('Request URL:', req.url);
-    console.log('Headers:', req.headers);
-    console.log('Query params:', req.query);
-    console.log('Registration ID:', req.params.registrationId);
+    console.log('Request params:', req.params);
+    console.log('Request query:', req.query);
     
     const user = getAuthUser(req);
     if (!user) {
       console.log('Authentication failed - no user found');
       res.status(401).json({ 
         message: "Authentication required",
-        details: "Please provide a valid authentication token either in the Authorization header or as a query parameter"
+        details: "Please provide a valid authentication token"
       });
       return;
     }
@@ -186,12 +158,6 @@ export const generateAttendeeBadge = async (
       return;
     }
 
-    console.log('Registration found:', {
-      id: registration.registrationId,
-      status: registration.status,
-      eventId: registration.event?.eventId
-    });
-
     if (registration.status.toLowerCase() !== "approved") {
       console.log(`Registration not approved: ${registrationId} (Status: ${registration.status})`);
       res.status(400).json({ 
@@ -211,7 +177,7 @@ export const generateAttendeeBadge = async (
       return;
     }
 
-    // Check if badge exists in database
+    // Check if badge exists
     let badge = await badgeRepository.findOne({
       where: { registrationId }
     });
@@ -223,13 +189,10 @@ export const generateAttendeeBadge = async (
       console.log('No existing badge found, will generate new one');
       shouldGenerateNewBadge = true;
     } else {
-      // Verify that the existing badge is still accessible
-      try {
-        console.log('Verifying existing badge accessibility...');
-        await downloadFromCloudinary(badge.badgeUrl);
-        console.log('Existing badge is accessible, using it');
-      } catch (error) {
-        console.log('Existing badge is not accessible, will generate new one:', error);
+      // Verify that the existing badge file exists
+      const filePath = path.join(process.cwd(), 'public', badge.badgeUrl.substring(1));
+      if (!fs.existsSync(filePath)) {
+        console.log('Existing badge file not found, will generate new one');
         shouldGenerateNewBadge = true;
       }
     }
@@ -262,37 +225,16 @@ export const generateAttendeeBadge = async (
     const returnFile = req.query.download === 'true';
     console.log('Download requested:', returnFile);
     
-    if (returnFile) {
-      try {
-        if (!badge) {
-          throw new Error('Badge not found in database');
-        }
-        console.log('Attempting to download badge with URL:', badge.badgeUrl);
-        await handleBadgeDownload(
-          badge,
-          registration,
-          registration.event,
-          res,
-          `badge-${registrationId}.pdf`
-        );
-        console.log('Badge download completed successfully');
-      } catch (downloadError) {
-        console.error('Error during badge download:', downloadError);
-        res.status(500).json({ 
-          message: "Failed to download badge", 
-          error: downloadError instanceof Error ? downloadError.message : 'Unknown error',
-          details: "There was an error downloading the badge file"
-        });
-      }
-    } else {
-      // Include token for direct download if available
+    if (returnFile && badge) {
+      // Serve the PDF file directly
+      const filePath = path.join(process.cwd(), 'public', badge.badgeUrl.substring(1));
+      console.log('Serving file from path:', filePath);
+      servePdfFile(filePath, res, `badge-${registrationId}.pdf`);
+    } else if (badge) {
+      // Return URL information
       const tokenParam = req.query.token ? `&token=${req.query.token}` : '';
       const baseUrl = process.env.API_BASE_URL || `http://${req.get('host')}`;
       
-      if (!badge) {
-        throw new Error('Badge not found in database');
-      }
-
       const downloadUrl = `${baseUrl}/api/badges/registrations/${registrationId}?download=true${tokenParam}`;
       
       console.log('Returning badge URLs:', {
@@ -304,6 +246,11 @@ export const generateAttendeeBadge = async (
         message: "Badge generated successfully",
         badgeUrl: badge.badgeUrl,
         downloadUrl
+      });
+    } else {
+      res.status(500).json({
+        message: "Failed to generate badge",
+        details: "Badge generation completed but no badge was found"
       });
     }
   } catch (error: any) {
