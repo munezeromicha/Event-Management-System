@@ -27,12 +27,8 @@ const app = express();
 app.set('trust proxy', 1);
 
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://event-management-system-i5mq.onrender.com', 'http://localhost:3000']
-    : 'http://localhost:3000',
-  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true 
+  origin: ['http://localhost:3001', 'http://localhost:3000'], // Add your frontend URL
+  credentials: true
 }));
 
 app.use(
@@ -84,9 +80,12 @@ if (process.env.NODE_ENV === 'production') {
   startKeepAliveCron();
 }
 
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack);
-  res.status(500).json({ message: "Internal server error" });
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Error:', err);
+  res.status(err.status || 500).json({
+    message: err.message || 'Internal Server Error',
+    details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  });
 });
 
 export default app;
