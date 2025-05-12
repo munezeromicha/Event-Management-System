@@ -1,5 +1,6 @@
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
+import path from 'path';
 
 const options: swaggerJsdoc.Options = {
   definition: {
@@ -11,8 +12,10 @@ const options: swaggerJsdoc.Options = {
     },
     servers: [
       {
-        url: 'https://event-management-system-i5mq.onrender.com',
-        description: 'Development server',
+        url: process.env.NODE_ENV === 'production' 
+          ? 'https://event-management-system-i5mq.onrender.com'
+          : 'http://localhost:4000',
+        description: process.env.NODE_ENV === 'production' ? 'Production server' : 'Development server',
       },
     ],
     components: {
@@ -107,7 +110,7 @@ const options: swaggerJsdoc.Options = {
       },
     },
   },
-  apis: ['./src/routes/*.ts'], // Path to the API routes
+  apis: [path.join(__dirname, '../routes/*.ts')], // Use absolute path
 };
 
 const specs = swaggerJsdoc(options);
