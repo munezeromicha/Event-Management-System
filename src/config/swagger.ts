@@ -11,7 +11,7 @@ const options: swaggerJsdoc.Options = {
     },
     servers: [
       {
-        url: 'http://localhost:3000',
+        url: 'https://event-management-system-i5mq.onrender.com',
         description: 'Development server',
       },
     ],
