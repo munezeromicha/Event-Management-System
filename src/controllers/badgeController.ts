@@ -153,13 +153,24 @@ export const generateAttendeeBadge = async (
   res: Response
 ): Promise<void> => {
   try {
+    console.log('=== Badge Generation Process Started ===');
+    console.log('Request URL:', req.url);
+    console.log('Headers:', req.headers);
+    console.log('Query params:', req.query);
+    console.log('Registration ID:', req.params.registrationId);
+    
     const user = getAuthUser(req);
     if (!user) {
-      res.status(401).json({ message: "Authentication required" });
+      console.log('Authentication failed - no user found');
+      res.status(401).json({ 
+        message: "Authentication required",
+        details: "Please provide a valid authentication token either in the Authorization header or as a query parameter"
+      });
       return;
     }
 
     const { registrationId } = req.params;
+    console.log(`Processing badge for registration ID: ${registrationId}`);
 
     const registration = await registrationRepository.findOne({
       where: { registrationId },
@@ -167,30 +178,65 @@ export const generateAttendeeBadge = async (
     });
 
     if (!registration) {
-      res.status(404).json({ message: "Registration not found" });
+      console.log(`Registration not found: ${registrationId}`);
+      res.status(404).json({ 
+        message: "Registration not found",
+        details: `No registration found with ID: ${registrationId}`
+      });
       return;
     }
 
+    console.log('Registration found:', {
+      id: registration.registrationId,
+      status: registration.status,
+      eventId: registration.event?.eventId
+    });
+
     if (registration.status.toLowerCase() !== "approved") {
+      console.log(`Registration not approved: ${registrationId} (Status: ${registration.status})`);
       res.status(400).json({ 
         message: "Registration is not approved",
-        status: registration.status
+        status: registration.status,
+        details: "Only approved registrations can download badges"
       });
       return;
     }
 
     if (!registration.event) {
-      res.status(404).json({ message: "Event not found for this registration" });
+      console.log(`Event not found for registration: ${registrationId}`);
+      res.status(404).json({ 
+        message: "Event not found for this registration",
+        details: "The registration exists but has no associated event"
+      });
       return;
     }
 
-    // Check if badge already exists
+    // Check if badge exists in database
     let badge = await badgeRepository.findOne({
       where: { registrationId }
     });
     
-    // Generate new badge if needed
+    let shouldGenerateNewBadge = false;
+    
+    // If badge doesn't exist or URL is missing, generate a new one
     if (!badge || !badge.badgeUrl) {
+      console.log('No existing badge found, will generate new one');
+      shouldGenerateNewBadge = true;
+    } else {
+      // Verify that the existing badge is still accessible
+      try {
+        console.log('Verifying existing badge accessibility...');
+        await downloadFromCloudinary(badge.badgeUrl);
+        console.log('Existing badge is accessible, using it');
+      } catch (error) {
+        console.log('Existing badge is not accessible, will generate new one:', error);
+        shouldGenerateNewBadge = true;
+      }
+    }
+
+    // Generate a new badge if needed
+    if (shouldGenerateNewBadge) {
+      console.log(`Generating new badge for registration: ${registrationId}`);
       try {
         const badgeUrl = await generateBadge(registration, registration.event);
         
@@ -201,37 +247,72 @@ export const generateAttendeeBadge = async (
         if (!badge || !badge.badgeUrl) {
           throw new Error('Badge generation failed - no URL returned');
         }
+        
+        console.log('New badge generated with URL:', badge.badgeUrl);
       } catch (error) {
+        console.error("Error generating badge:", error);
         res.status(500).json({ 
           message: "Failed to generate badge",
-          error: error instanceof Error ? error.message : 'Unknown error'
+          details: error instanceof Error ? error.message : 'Unknown error during badge generation'
         });
         return;
       }
     }
 
     const returnFile = req.query.download === 'true';
+    console.log('Download requested:', returnFile);
     
     if (returnFile) {
-      await handleBadgeDownload(
-        badge,
-        registration,
-        registration.event,
-        res,
-        `badge-${registrationId}.pdf`
-      );
+      try {
+        if (!badge) {
+          throw new Error('Badge not found in database');
+        }
+        console.log('Attempting to download badge with URL:', badge.badgeUrl);
+        await handleBadgeDownload(
+          badge,
+          registration,
+          registration.event,
+          res,
+          `badge-${registrationId}.pdf`
+        );
+        console.log('Badge download completed successfully');
+      } catch (downloadError) {
+        console.error('Error during badge download:', downloadError);
+        res.status(500).json({ 
+          message: "Failed to download badge", 
+          error: downloadError instanceof Error ? downloadError.message : 'Unknown error',
+          details: "There was an error downloading the badge file"
+        });
+      }
     } else {
-      // Return URL info
+      // Include token for direct download if available
+      const tokenParam = req.query.token ? `&token=${req.query.token}` : '';
+      const baseUrl = process.env.API_BASE_URL || `http://${req.get('host')}`;
+      
+      if (!badge) {
+        throw new Error('Badge not found in database');
+      }
+
+      const downloadUrl = `${baseUrl}/api/badges/registrations/${registrationId}?download=true${tokenParam}`;
+      
+      console.log('Returning badge URLs:', {
+        badgeUrl: badge.badgeUrl,
+        downloadUrl
+      });
+      
       res.status(200).json({
         message: "Badge generated successfully",
         badgeUrl: badge.badgeUrl,
-        downloadUrl: `/api/badges/registrations/${registrationId}?download=true&token=${req.query.token || ''}`
+        downloadUrl
       });
     }
   } catch (error: any) {
+    console.error("Badge generation error:", error);
+    console.error("Stack trace:", error.stack);
     res.status(500).json({ 
       message: "Failed to generate badge", 
-      error: error.message 
+      error: error.message,
+      details: "An unexpected error occurred while processing the badge"
     });
   }
 };
