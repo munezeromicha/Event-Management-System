@@ -49,25 +49,25 @@ export const registerForEvent = async (
 
   // Check if already registered with same identification
   const whereConditions = [];
-  
+
   if (registrationData.nationalId) {
-    whereConditions.push({ 
-      event: { eventId }, 
-      nationalId: registrationData.nationalId 
-    });
-  }
-  
-  if (registrationData.passport) {
-    whereConditions.push({ 
-      event: { eventId }, 
-      passport: registrationData.passport 
+    whereConditions.push({
+      event: { eventId },
+      nationalId: registrationData.nationalId
     });
   }
 
-  const existingRegistration = whereConditions.length > 0 
+  if (registrationData.passport) {
+    whereConditions.push({
+      event: { eventId },
+      passport: registrationData.passport
+    });
+  }
+
+  const existingRegistration = whereConditions.length > 0
     ? await registrationRepository.findOne({
-        where: whereConditions
-      })
+      where: whereConditions
+    })
     : null;
 
   if (existingRegistration) {
@@ -124,16 +124,16 @@ export const approveRegistration = async (
   registration.admin = admin;
 
   const updatedRegistration = await registrationRepository.save(registration);
-  
+
   let badgeId;
-  
+
   try {
     // Generate badge
     badgeId = await generateBadge(updatedRegistration, registration.event);
-    
+
     // Send SMS notification with badge information
     await sendSMSNotification(updatedRegistration, 'approved', badgeId);
-    
+
     // Send approval email with badge information
     if (updatedRegistration.email) {
       await sendApprovalEmail(updatedRegistration, registration.event, badgeId);
@@ -174,11 +174,11 @@ export const rejectRegistration = async (
   registration.admin = admin;
 
   const updatedRegistration = await registrationRepository.save(registration);
-  
+
   try {
     // Send SMS notification
     await sendSMSNotification(updatedRegistration, 'rejected');
-    
+
     // Send rejection email
     if (updatedRegistration.email) {
       await sendRejectionEmail(updatedRegistration, registration.event);
@@ -225,15 +225,15 @@ export const updateRegistrationStatus = async (
     where: { registrationId },
     relations: ["event"]
   });
-  
+
   if (!registration) {
     return null;
   }
-  
+
   const previousStatus = registration.status;
   registration.status = status;
   const updatedRegistration = await registrationRepository.save(registration);
-  
+
   // Send appropriate email based on the new status
   if (previousStatus !== status && updatedRegistration.email) {
     try {
@@ -248,7 +248,7 @@ export const updateRegistrationStatus = async (
       // Continue even if email fails
     }
   }
-  
+
   return updatedRegistration;
 };
 
@@ -264,10 +264,10 @@ export const getAllAttendees = async () => {
 
     // Group registrations by attendee
     const attendeesMap = new Map();
-    
+
     registrations.forEach(registration => {
       const attendee = registration.attendee;
-      
+
       // Skip if attendee is null
       if (!attendee) {
         return;
@@ -284,7 +284,7 @@ export const getAllAttendees = async () => {
           registrations: []
         });
       }
-      
+
       attendeesMap.get(attendee.attendeeId).registrations.push({
         eventId: registration.event.eventId,
         eventName: registration.event.name,

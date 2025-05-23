@@ -9,10 +9,9 @@ import eventRoutes from "./routes/eventRoutes";
 import registrationRoutes from "./routes/registrationRoutes";
 import attendanceRoutes from "./routes/attendanceRoutes";
 import badgeRoutes from "./routes/badgeRoutes";
+import staffRoutes from "./routes/staffRoutes";
 import rateLimit from "express-rate-limit";
 import path from "path";
-import healthRoutes from './routes/healthRoutes';
-import { startKeepAliveCron } from './cron/keepAlive';
 
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -23,25 +22,12 @@ const apiLimiter = rateLimit({
 
 const app = express();
 
-// Trust proxy for rate limiting behind reverse proxy
-app.set('trust proxy', 1);
-
 app.use(cors({
-  origin: [
-    'https://event-management-system-i5mq.onrender.com',
-    'http://localhost:3000',
-    'http://localhost:3001'
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-  exposedHeaders: ['Content-Disposition', 'Content-Type'],
-  preflightContinue: false,
-  optionsSuccessStatus: 204
+  origin: 'http://localhost:3001', // Your frontend URL
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true 
 }));
-
-// Add OPTIONS handling for preflight requests
-app.options('*', cors());
 
 app.use(
   helmet({
@@ -50,12 +36,11 @@ app.use(
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "blob:", "*"],
+        imgSrc: ["'self'", "data:", "blob:"],
         mediaSrc: ["'self'", "data:", "blob:"],
-        connectSrc: ["'self'", "https://event-management-system-i5mq.onrender.com"],
+        connectSrc: ["'self'"],
         workerSrc: ["'self'", "blob:"],
-        childSrc: ["'self'", "blob:", "*"],
-        frameAncestors: ["'self'", "http://localhost:3000", "http://localhost:3001"],
+        childSrc: ["'self'", "blob:"],
       },
     },
   })
@@ -75,30 +60,21 @@ AppDataSource.initialize()
 app.use(express.static(path.join(__dirname, '../public')));
 app.use("/js", express.static(path.join(__dirname, "../public/js")));
 app.use("/badges", express.static(path.join(__dirname, "../public/badges")));
+app.use("/images", express.static(path.join(__dirname, "../public/images")));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/events", eventRoutes);
 app.use("/api/registrations", registrationRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/badges", badgeRoutes);
-
-// Add health routes
-app.use('/api', healthRoutes);
+app.use("/api/staff", staffRoutes);
 
 // Setup Swagger documentation
 setupSwagger(app);
 
-// Start the keep-alive cron job
-if (process.env.NODE_ENV === 'production') {
-  startKeepAliveCron();
-}
-
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Error:', err);
-  res.status(err.status || 500).json({
-    message: err.message || 'Internal Server Error',
-    details: process.env.NODE_ENV === 'development' ? err.stack : undefined
-  });
+app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error(err.stack);
+  res.status(500).json({ message: "Internal server error" });
 });
 
 export default app;

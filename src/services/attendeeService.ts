@@ -7,7 +7,7 @@ export const getAllAttendees = async (): Promise<Attendee[]> => {
   return await attendeeRepository.find();
 };
 
-export const getAttendeeById = async (id: string): Promise<Attendee | null> => {
+export const getAttendeeById = async (id: number): Promise<Attendee | null> => {
   return await attendeeRepository.findOne({ where: { attendeeId: id } });
 };
 
@@ -18,7 +18,7 @@ export const createAttendee = async (attendeeData: Partial<Attendee>): Promise<A
 
 export const updateAttendee = async (id: number, attendeeData: Partial<Attendee>): Promise<Attendee | null> => {
   await attendeeRepository.update(id, attendeeData);
-  return await getAttendeeById(id.toString());
+  return await getAttendeeById(id);
 };
 
 export const deleteAttendee = async (id: number): Promise<void> => {

@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, OneToOne, JoinColumn } from "typeorm";
 import { Registration } from "./Registration";
 
 @Entity()
@@ -9,17 +9,8 @@ export class Badge {
   @Column()
   registrationId!: string;
 
-  @Column({ nullable: true })
+  @Column()
   qrCode!: string;
-
-  @Column({ nullable: true })
-  badgeUrl!: string;
-
-  @CreateDateColumn()
-  createdAt!: Date;
-
-  @UpdateDateColumn()
-  updatedAt!: Date;
 
   @OneToOne(() => Registration, registration => registration.badge)
   @JoinColumn({ name: "registrationId" })

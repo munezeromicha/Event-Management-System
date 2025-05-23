@@ -4,7 +4,14 @@ import { Event } from "../models/Event";
 const eventRepository = AppDataSource.getRepository(Event);
 
 export const getAllEvents = async (): Promise<Event[]> => {
-  return await eventRepository.find();
+  return await eventRepository.find({
+    relations: {
+      admin: true,
+      registrations: true,
+      notifications: true,
+      attendances: true
+    }
+  });
 };
 
 export const getEventById = async (id: string): Promise<Event | null> => {

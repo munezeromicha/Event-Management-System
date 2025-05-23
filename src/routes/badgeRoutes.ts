@@ -3,45 +3,13 @@ import { Router } from "express";
 import { Request, Response, NextFunction } from "express";
 import { generateAttendeeBadge, getAttendeeBadgeByEventAndName } from "../controllers/badgeController";
 import { authenticateJWT } from "../middleware/auth";
-import { verifyToken } from "../utils/jwt";
 
 const router = Router();
 
-// Create a flexible auth middleware that checks both header and query token
-const flexibleAuth = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    // Check header for token
-    const authHeader = req.headers.authorization;
-    
-    // Check query parameter for token
-    const queryToken = req.query.token as string;
-    
-    let token = null;
-    
-    // Get token from header or query parameter
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.substring(7); // Remove 'Bearer ' from string
-    } else if (queryToken) {
-      token = queryToken;
-    }
-    
-    if (token) {
-      try {
-        // If token is present, verify it and attach to request
-        const decoded = await verifyToken(token);
-        (req as any).user = decoded;
-      } catch (err) {
-        console.log('Token verification failed:', err);
-      }
-    }
-    
-    // Always continue to next middleware
-    next();
-  } catch (error) {
-    console.error('Auth middleware error:', error);
-    next();
-  }
-};
+// Define type for AuthRequest if it's a custom type used by authenticateJWT
+interface AuthRequest extends Request {
+  user?: any; // Define this according to your actual user structure
+}
 
 /**
  * @swagger
@@ -63,15 +31,24 @@ const flexibleAuth = async (req: Request, res: Response, next: NextFunction) => 
  *         schema:
  *           type: boolean
  *         description: Set to true to download the badge directly
- *       - in: query
- *         name: token
- *         required: false
- *         schema:
- *           type: string
- *         description: Authentication token (alternative to Bearer token)
  *     responses:
  *       200:
  *         description: Badge generated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 badgeUrl:
+ *                   type: string
+ *                 downloadUrl:
+ *                   type: string
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
  *       400:
  *         description: Registration not approved
  *       404:
@@ -79,20 +56,10 @@ const flexibleAuth = async (req: Request, res: Response, next: NextFunction) => 
  */
 router.get(
   "/registrations/:registrationId", 
-  flexibleAuth,
-  async (req: Request, res: Response, next: NextFunction) => {
+  authenticateJWT,
+  // Wrap the handler function to ensure expected return type
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const download = req.query.download === 'true';
-      
-      if (download) {
-        // Set headers for direct download
-        res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
-        res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Type');
-      }
-      
       await generateAttendeeBadge(req, res);
     } catch (error) {
       next(error);
@@ -125,22 +92,17 @@ router.get(
  *         schema:
  *           type: boolean
  *         description: Set to true to download the badge directly
- *       - in: query
- *         name: token
- *         required: false
- *         schema:
- *           type: string
- *         description: Authentication token (alternative to Bearer token)
  *     responses:
  *       200:
- *         description: Badge found successfully
+ *         description: Badge generated successfully
  *       404:
- *         description: Registration not found
+ *         description: Approved registration not found
  */
 router.get(
   "/events/:eventId/attendees/:fullName", 
-  flexibleAuth,
-  async (req: Request, res: Response, next: NextFunction) => {
+  authenticateJWT,
+  // Wrap the handler function to ensure expected return type
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       await getAttendeeBadgeByEventAndName(req, res);
     } catch (error) {

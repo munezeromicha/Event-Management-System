@@ -7,191 +7,154 @@ import fs from 'fs';
 import path from 'path';
 import { AppDataSource } from '../config/database';
 import { Badge } from '../models/Badge';
-import cloudinary from '../config/cloudinary';
 
 // Create badge repository for saving badge records
 const badgeRepository = AppDataSource.getRepository(Badge);
 
-// RNIT logo URL - use this as default logo for all badges
-const DEFAULT_LOGO_URL = 'https://shora.rnit.rw/files/RNIT%20Ltd_Logo.png';
-
 export const generateBadge = async (registration: Registration, event: Event): Promise<string> => {
-  return new Promise(async (resolve, reject) => {
-    try {
-      // Create temp directory if it doesn't exist
-      const tempDir = path.join(process.cwd(), 'temp');
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
-      }
+  try {
+    // Create a new PDF document with better dimensions for a badge
+    const doc = new PDFDocument({
+      size: [400, 600],
+      margin: 10,
+      bufferPages: true // Enable buffer pages for better control
+    });
 
-      const tempFilePath = path.join(tempDir, `temp_badge_${registration.registrationId}.pdf`);
-      const doc = new PDFDocument({
-        size: [400, 600],
-        margin: 50,
-        info: {
-          Title: `Event Badge - ${registration.fullName}`,
-          Author: 'Event Management System',
-          Subject: `Badge for ${event.name}`,
-        }
-      });
+    // Create a unique filename
+    const badgeId = `badge_${registration.registrationId}.pdf`;
+    
+    // Define paths
+    const badgesDir = path.join(process.cwd(), 'public', 'badges');
+    const outputPath = path.join(badgesDir, badgeId);
+    const logoPath = path.join(process.cwd(), 'public', 'images', 'rnit-logo.png');
 
-      const writeStream = fs.createWriteStream(tempFilePath);
-      doc.pipe(writeStream);
-
-      // Generate QR Code
-      const qrCodeDataUrl = await QRCode.toDataURL(registration.registrationId);
-
-      // Improved badge layout
-      // Add RNIT logo
-      try {
-        // Always use the default RNIT logo
-        doc.image(DEFAULT_LOGO_URL, { fit: [250, 80], align: 'center' })
-          .moveDown(1);
-      } catch (e) {
-        console.error('Error loading logo:', e);
-        // If loading the logo fails, just continue without it
-        doc.moveDown(2);
-      }
-
-      // Event name with better styling
-      doc.fontSize(22)
-         .fillColor('#0066cc')
-         .text(event.name, { align: 'center' })
-         .moveDown(0.5);
-      
-      // Horizontal line
-      doc.moveTo(50, doc.y)
-         .lineTo(350, doc.y)
-         .stroke('#dddddd')
-         .moveDown(0.5);
-
-      // Attendee name with better styling
-      doc.fontSize(18)
-         .fillColor('#333333')
-         .font('Helvetica-Bold')
-         .text(registration.fullName, { align: 'center' })
-         .moveDown(0.5)
-         .font('Helvetica');
-
-      // Organization with better styling
-      if (registration.organization) {
-        doc.fontSize(14)
-           .fillColor('#666666')
-           .text(registration.organization, { align: 'center' })
-           .moveDown(0.5);
-      }
-
-      // Badge details in a more structured way
-      doc.fontSize(12)
-         .fillColor('#444444');
-
-      // Create a two-column layout for details
-      const leftColX = 70;
-      const rightColX = 160;
-      let detailsY = doc.y + 10;
-
-      // Email
-      doc.text('Email:', leftColX, detailsY, { continued: false });
-      doc.text(registration.email || 'N/A', rightColX, detailsY, { continued: false });
-      detailsY += 20;
-
-      // Event Date
-      doc.text('Event Date:', leftColX, detailsY, { continued: false });
-      doc.text(new Date(event.dateTime).toLocaleDateString(), rightColX, detailsY, { continued: false });
-      detailsY += 20;
-
-      // Location
-      doc.text('Location:', leftColX, detailsY, { continued: false });
-      doc.text(event.location, rightColX, detailsY, { continued: false });
-      detailsY += 20;
-
-      // Registration ID (smaller and less prominent)
-      doc.fontSize(8)
-         .fillColor('#999999')
-         .text(`ID: ${registration.registrationId}`, { align: 'center' })
-         .moveDown(1.5);
-
-      // Add QR Code with better positioning
-      doc.image(qrCodeDataUrl, {
-        fit: [150, 150],
-        align: 'center'
-      });
-
-      // Add a note below the QR code
-      doc.fontSize(10)
-         .fillColor('#666666')
-         .text('Scan to verify attendance', { align: 'center' })
-         .moveDown(0.5);
-
-      // Add footer
-      doc.fontSize(8)
-         .fillColor('#999999')
-         .text('This badge must be presented at the event entrance.', { align: 'center' })
-         .moveDown(0.2)
-         .text(`Generated on ${new Date().toLocaleDateString()}`, { align: 'center' });
-
-      doc.end();
-
-      writeStream.on('finish', async () => {
-        try {
-          // Upload to Cloudinary with enhanced security settings
-          const result = await cloudinary.uploader.upload(tempFilePath, {
-            resource_type: 'raw',
-            public_id: `badges/badge_${registration.registrationId}`,
-            format: 'pdf',
-            overwrite: true,
-            access_mode: 'public',
-            type: 'upload',
-            use_filename: true,
-            unique_filename: false,
-            invalidate: true
-          });
-
-          // Generate a signed URL with an expiration time
-          const signedUrl = cloudinary.url(result.public_id, {
-            resource_type: 'raw',
-            format: 'pdf',
-            secure: true,
-            sign_url: true, 
-            expires_at: Math.floor(Date.now() / 1000) + 3600 // 1 hour from now
-          });
-
-          // Update or create badge record
-          let badge = await badgeRepository.findOne({
-            where: { registrationId: registration.registrationId }
-          });
-
-          if (badge) {
-            badge.badgeUrl = signedUrl;
-            badge.qrCode = registration.registrationId;
-          } else {
-            badge = new Badge();
-            badge.registrationId = registration.registrationId;
-            badge.qrCode = registration.registrationId;
-            badge.badgeUrl = signedUrl;
-          }
-
-          await badgeRepository.save(badge);
-
-          // Delete temp file
-          fs.unlink(tempFilePath, (err) => {
-            if (err) console.error('Error deleting temp file:', err);
-          });
-
-          resolve(signedUrl);
-        } catch (error) {
-          console.error('Error uploading to Cloudinary:', error);
-          reject(error);
-        }
-      });
-
-      writeStream.on('error', (error) => {
-        console.error('Error writing PDF:', error);
-        reject(error);
-      });
-    } catch (error) {
-      console.error('Error in badge generation:', error);
-      reject(error);
+    // Ensure the badges directory exists
+    if (!fs.existsSync(badgesDir)) {
+      fs.mkdirSync(badgesDir, { recursive: true });
     }
-  });
+
+    // Create a write stream
+    const stream = fs.createWriteStream(outputPath);
+    doc.pipe(stream);
+
+    // Parse date correctly (handle both Date objects and strings)
+    const eventDate = typeof event.dateTime === 'string' 
+      ? new Date(event.dateTime) 
+      : event.dateTime;
+    
+    // Format the date and time for display
+    const formattedDate = eventDate.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+    
+    const formattedTime = eventDate.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    // Generate QR code data with essential info for verification
+    const qrData = JSON.stringify({
+      registrationId: registration.registrationId,
+      eventId: event.eventId,
+      attendee: registration.fullName,
+      timestamp: new Date().toISOString()
+    });
+
+    // Generate QR code as buffer
+    const qrCodeBuffer = await QRCode.toBuffer(qrData, {
+      errorCorrectionLevel: 'M', // Medium error correction for better readability
+      margin: 1,
+      width: 180
+    });
+
+    // Enhanced badge design with better visual hierarchy
+    // --- Header with RNIT Logo ---
+    doc
+      .rect(0, 0, 400, 100)
+      .fill('#4a90e2');
+    
+    // Add RNIT logo if it exists
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, 150, 10, { width: 100 });
+    } else {
+      // Fallback to text if logo is not available
+      doc
+        .fillColor('white')
+        .fontSize(24)
+        .font('Helvetica-Bold')
+        .text('RNIT', 20, 40, { width: 360, align: 'center' });
+    }
+
+    // --- Attendee Information ---
+    doc
+      .fillColor('#333333')
+      .fontSize(32)
+      .font('Helvetica-Bold')
+      .text(registration.fullName, 20, 140, { width: 360, align: 'center' });
+
+    // Organization (with fallback)
+    doc
+      .fontSize(18)
+      .font('Helvetica')
+      .fillColor('#666666')
+      .text(registration.organization || 'Guest', 20, 420, { width: 360, align: 'center' });
+
+    // --- Divider ---
+    doc
+      .moveTo(50, 220)
+      .lineTo(350, 220)
+      .strokeColor('#dddddd')
+      .lineWidth(2)
+      .stroke();
+
+    // --- QR Code ---
+    doc.image(qrCodeBuffer, 110, 240, { width: 180 });
+
+    // --- Event Details ---
+    doc
+      .fillColor('#333333')
+      .fontSize(16)
+      .font('Helvetica-Bold')
+      .text('Event Details:', 50, 440);
+
+    doc
+      .fontSize(14)
+      .font('Helvetica')
+      .fillColor('#666666')
+      .text(`Date: ${formattedDate}`, 50, 470)
+      .text(`Time: ${formattedTime}`, 50, 495)
+      .text(`Location: ${event.location}`, 50, 520);
+
+    // --- Footer ---
+    doc
+      .fillColor('#888888')
+      .fontSize(11)
+      .text('Please present this badge at the event entrance', 20, 570, { width: 360, align: 'center' });
+
+    // Add a border to the entire badge
+    doc
+      .rect(5, 5, 390, 590)
+      .strokeColor('#dddddd')
+      .lineWidth(1)
+      .stroke();
+
+    // Finalize the PDF
+    doc.end();
+
+    // Wait for the stream to finish
+    await new Promise<void>((resolve) => stream.on('finish', resolve));
+
+    // Save badge reference in the database
+    const badge = new Badge();
+    badge.registrationId = registration.registrationId;
+    badge.qrCode = qrData;
+    await badgeRepository.save(badge);
+
+    return badgeId;
+  } catch (error) {
+    console.error('Error generating badge:', error);
+    throw error;
+  }
 };

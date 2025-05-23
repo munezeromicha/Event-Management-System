@@ -226,7 +226,7 @@ export const sendApprovalEmail = async (registration: Registration, event: Event
     from: `"RNIT Events" <munezerontaganiramichel@gmail.com>`,
     to: registration.email,
     subject: `Registration Approved: ${event.name}`,
-    html: createEmailTemplate('Registration Approved', content, 'View Event Details', `http://localhost:3000/api/events/${event.eventId}`)
+    html: createEmailTemplate('Registration Approved', content, 'View Event Details', `http://localhost:3001/api/events/${event.eventId}`)
   };
 
   try {
@@ -271,7 +271,7 @@ export const sendRejectionEmail = async (registration: Registration, event: Even
     from: `"RNIT Events" <munezerontaganiramichel@gmail.com>`,
     to: registration.email,
     subject: `Registration Status: ${event.name}`,
-    html: createEmailTemplate('Registration Status Update', content, 'Explore Other Events', 'http://localhost:3000/api/events')
+    html: createEmailTemplate('Registration Status Update', content, 'Explore Other Events', 'http://localhost:3001/api/events')
   };
 
   try {

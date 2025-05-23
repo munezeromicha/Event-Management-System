@@ -49,7 +49,7 @@ export const getAllAttendees = async (req: Request, res: Response) => {
 export const getAttendeeById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const attendee = await attendeeService.getAttendeeById(id);
+    const attendee = await attendeeService.getAttendeeById(parseInt(id));
     
     if (!attendee) {
       return res.status(404).json({ message: "Attendee not found" });
