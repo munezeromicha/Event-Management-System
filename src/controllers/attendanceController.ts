@@ -6,7 +6,6 @@ import {
   getScannedAttendeesByEvent,
   updateAttendeeBank
 } from "../services/attendanceService";
-import { AuthRequest } from "../middleware/auth";
 
 export const scanAttendeeQR = async (req: Request, res: Response) => {
   console.time('qrScan');
@@ -74,7 +73,7 @@ export const scanAttendeeQR = async (req: Request, res: Response) => {
   }
 };
 
-export const getAttendanceList = async (req: AuthRequest, res: Response) => {
+export const getAttendanceList = async (req: Request, res: Response) => {
   try {
     const { eventId } = req.params;
     
@@ -104,7 +103,7 @@ export const getAttendanceList = async (req: AuthRequest, res: Response) => {
 /**
  * Get all attendees whose badges have been scanned (across all events)
  */
-export const getScannedAttendeesList = async (req: AuthRequest, res: Response) => {
+export const getScannedAttendeesList = async (req: Request, res: Response) => {
   try {
     // Parse pagination parameters
     const page = parseInt(req.query.page as string) || 1;
@@ -138,7 +137,7 @@ export const getScannedAttendeesList = async (req: AuthRequest, res: Response) =
 /**
  * Get all attendees for a specific event whose badges have been scanned
  */
-export const getScannedAttendeesByEventList = async (req: AuthRequest, res: Response) => {
+export const getScannedAttendeesByEventList = async (req: Request, res: Response) => {
   try {
     const { eventId } = req.params;
     
@@ -182,7 +181,7 @@ export const getScannedAttendeesByEventList = async (req: AuthRequest, res: Resp
 /**
  * Update bank account information for an attendee
  */
-export const updateAttendeeBankAccount = async (req: AuthRequest, res: Response) => {
+export const updateAttendeeBankAccount = async (req: Request, res: Response) => {
   try {
     const { attendanceId } = req.params;
     const { bankAccountNumber, bankName } = req.body;
@@ -202,35 +201,15 @@ export const updateAttendeeBankAccount = async (req: AuthRequest, res: Response)
       });
     }
     
-    if (!bankName) {
-      return res.status(400).json({
-        success: false,
-        message: "Bank name is required"
-      });
-    }
+    const updatedAttendee = await updateAttendeeBank(attendanceId, bankAccountNumber, bankName);
     
-    // Update bank account information
-    const result = await updateAttendeeBank(attendanceId, bankAccountNumber, bankName);
-    
-    return res.status(200).json(result);
+    return res.status(200).json({
+      success: true,
+      message: "Bank account information updated successfully",
+      attendee: updatedAttendee
+    });
   } catch (error: any) {
     console.error("Update bank account error:", error);
-    
-    if (error.message === "Attendee not found") {
-      return res.status(404).json({
-        success: false,
-        message: "Attendee not found"
-      });
-    }
-    
-    if (error.message === "Bank account number is required" || 
-        error.message === "Bank name is required") {
-      return res.status(400).json({
-        success: false,
-        message: error.message
-      });
-    }
-    
     return res.status(500).json({
       success: false,
       message: "Failed to update bank account information"
