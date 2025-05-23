@@ -2,11 +2,7 @@
 import { Request, Response, NextFunction } from "express";
 import { verifyToken } from "../utils/jwt";
 
-export interface AuthRequest extends Request {
-  user?: any;
-}
-
-export const authenticateJWT = (req: AuthRequest, res: Response, next: NextFunction): void => {
+export const authenticateJWT = (req: Request, res: Response, next: NextFunction): void => {
   const authHeader = req.headers.authorization;
 
   if (authHeader) {
@@ -26,7 +22,7 @@ export const authenticateJWT = (req: AuthRequest, res: Response, next: NextFunct
   }
 };
 
-export const isAdmin = (req: AuthRequest, res: Response, next: NextFunction): void => {
+export const isAdmin = (req: Request, res: Response, next: NextFunction): void => {
   if (req.user && (req.user.role === "admin" || req.user.role === "staff")) {
     next();
   } else {
@@ -35,7 +31,7 @@ export const isAdmin = (req: AuthRequest, res: Response, next: NextFunction): vo
   }
 };
 
-export const isEventManager = (req: AuthRequest, res: Response, next: NextFunction): void => {
+export const isEventManager = (req: Request, res: Response, next: NextFunction): void => {
   if (req.user && req.user.role === "event_manager") {
     next();
   } else {
